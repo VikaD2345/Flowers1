@@ -35,7 +35,7 @@ const Popular = ({ onAddToCart }) => {
                     </div>
                 ))}
             </div>
-            <button className="popular-button">Показать все</button> 
+                        <button className="popular-button" onClick={() => {goToCatalog}}>Показать все</button> 
         </section>
     );
 }}
