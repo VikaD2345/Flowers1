@@ -58,7 +58,7 @@ const CartPage = ({ items, onIncrease, onDecrease, onRemove, onContinueShopping 
               <strong>{total} ₽</strong>
             </div>
             <button className="cart-pay" type="button">
-              Оплатить
+              Оформить заказ
             </button>
           </div>
         </aside>
