@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+
+  db:
+    image: postgres:16
+    container_name: flowers_db
+    restart: always
+    environment:
+      POSTGRES_USER: flowers_user
+      POSTGRES_PASSWORD: flowers_pass
+      POSTGRES_DB: flowers_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # ← добавь эту строку
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: flowers_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@flowers.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://flowers_user:flowers_pass@db:5432/flowers_db
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

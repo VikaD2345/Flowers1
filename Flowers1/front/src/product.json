@@ -1,0 +1,146 @@
+[
+  {
+    "id": 101,
+    "image": "./src/assets/1.jpg",
+    "title": "45 красных роз",
+    "description": "Яркий и насыщенный букет",
+    "price": 5500,
+    "category": "Розы"
+  },
+  {
+    "id": 102,
+    "image": "./src/assets/1.jpg",
+    "title": "Белые хризантемы",
+    "description": "Воздушная классика",
+    "price": 4000,
+    "category": "Хризантемы"
+  },
+  {
+    "id": 103,
+    "image": "./src/assets/1.jpg",
+    "title": "Сборный букет",
+    "description": "Розы, лилии и зелень",
+    "price": 6500,
+    "category": "Сборные"
+  },
+  {
+    "id": 104,
+    "image": "./src/assets/1.jpg",
+    "title": "Нежный розовый",
+    "description": "Лёгкая пастельная палитра",
+    "price": 5000,
+    "category": "Пионы"
+  },
+  {
+    "id": 105,
+    "image": "./src/assets/1.jpg",
+    "title": "Микс букет",
+    "description": "Праздничная композиция",
+    "price": 3300,
+    "category": "Лилии"
+  },
+  {
+    "id": 106,
+    "image": "./src/assets/1.jpg",
+    "title": "25 роз",
+    "description": "Яркий акцент для подарка",
+    "price": 2999,
+    "category": "Розы"
+  },
+  {
+    "id": 107,
+    "image": "./src/assets/1.jpg",
+    "title": "Романтика",
+    "description": "Нежные оттенки и аромат",
+    "price": 4500,
+    "category": "Тюльпаны"
+  },
+  {
+    "id": 108,
+    "image": "./src/assets/1.jpg",
+    "title": "Белое облако",
+    "description": "Большой круглый букет",
+    "price": 7000,
+    "category": "Хризантемы"
+  },
+  {
+    "id": 109,
+    "image": "./src/assets/1.jpg",
+    "title": "Садовый микс",
+    "description": "Яркий авторский букет",
+    "price": 5000,
+    "category": "Гортензии"
+  },
+  {
+    "id": 101,
+    "image": "./src/assets/1.jpg",
+    "title": "45 красных роз",
+    "description": "Яркий и насыщенный букет",
+    "price": 5500,
+    "category": "Розы"
+  },
+  {
+    "id": 102,
+    "image": "./src/assets/1.jpg",
+    "title": "Белые хризантемы",
+    "description": "Воздушная классика",
+    "price": 4000,
+    "category": "Хризантемы"
+  },
+  {
+    "id": 103,
+    "image": "./src/assets/1.jpg",
+    "title": "Сборный букет",
+    "description": "Розы, лилии и зелень",
+    "price": 6500,
+    "category": "Сборные"
+  },
+  {
+    "id": 104,
+    "image": "./src/assets/1.jpg",
+    "title": "Нежный розовый",
+    "description": "Лёгкая пастельная палитра",
+    "price": 5000,
+    "category": "Пионы"
+  },
+  {
+    "id": 105,
+    "image": "./src/assets/1.jpg",
+    "title": "Микс букет",
+    "description": "Праздничная композиция",
+    "price": 3300,
+    "category": "Лилии"
+  },
+  {
+    "id": 106,
+    "image": "./src/assets/1.jpg",
+    "title": "25 роз",
+    "description": "Яркий акцент для подарка",
+    "price": 2999,
+    "category": "Розы"
+  },
+  {
+    "id": 107,
+    "image": "./src/assets/1.jpg",
+    "title": "Романтика",
+    "description": "Нежные оттенки и аромат",
+    "price": 4500,
+    "category": "Тюльпаны"
+  },
+  {
+    "id": 108,
+    "image": "./src/assets/1.jpg",
+    "title": "Белое облако",
+    "description": "Большой круглый букет",
+    "price": 7000,
+    "category": "Хризантемы"
+  },
+  {
+    "id": 109,
+    "image": "./src/assets/1.jpg",
+    "title": "Садовый микс",
+    "description": "Яркий авторский букет",
+    "price": 5000,
+    "category": "Гортензии"
+  }
+]
