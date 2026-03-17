@@ -113,7 +113,7 @@ def require_admin(user: UserModel = Depends(get_current_user)) -> UserModel:
 
 class FlowerBase(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    price: float = Field(gt=0)
+    price: float = Field(ge=0)
     image_url: str = Field(min_length=1, max_length=1024)
 
 
