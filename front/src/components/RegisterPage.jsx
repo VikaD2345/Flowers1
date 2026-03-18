@@ -2,12 +2,11 @@ import { useState } from "react";
 import "../main.css";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
-const REGISTER_URL = import.meta.env.VITE_REGISTER_URL ?? `${API_BASE_URL}/register`;
+const REGISTER_URL = import.meta.env.VITE_REGISTER_URL ?? `${API_BASE_URL}/auth/register`;
 
 const RegisterPage = ({ onOpenLogin }) => {
   const [formData, setFormData] = useState({
-    name: "",
-    email: "",
+    username: "",
     password: "",
   });
   const [submitState, setSubmitState] = useState({
@@ -28,7 +27,7 @@ const RegisterPage = ({ onOpenLogin }) => {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!formData.name || !formData.email || !formData.password) {
+    if (!formData.username || !formData.password) {
       setSubmitState({
         isLoading: false,
         error: "Заполни все поля перед регистрацией.",
@@ -69,8 +68,7 @@ const RegisterPage = ({ onOpenLogin }) => {
         success: "Регистрация прошла успешно. Теперь можно войти в аккаунт.",
       });
       setFormData({
-        name: "",
-        email: "",
+        username: "",
         password: "",
       });
     } catch (error) {
@@ -95,17 +93,9 @@ const RegisterPage = ({ onOpenLogin }) => {
           <form className="register-form" onSubmit={handleSubmit}>
             <input
               type="text"
-              name="name"
+              name="username"
               placeholder="Имя"
-              value={formData.name}
-              onChange={handleChange}
-              disabled={submitState.isLoading}
-            />
-            <input
-              type="email"
-              name="email"
-              placeholder="Email"
-              value={formData.email}
+              value={formData.username}
               onChange={handleChange}
               disabled={submitState.isLoading}
             />

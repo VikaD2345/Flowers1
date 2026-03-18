@@ -147,6 +147,10 @@ class UserOut(BaseModel):
     role: UserRole
 
 
+class AdminUserOut(UserOut):
+    created_at: datetime
+
+
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -579,9 +583,33 @@ def admin_update_order_status(
     )
 
 
+@app.get("/admin/users", response_model=list[AdminUserOut])
+def admin_list_users(_: UserModel = Depends(require_admin), db: Session = Depends(get_db)) -> list[AdminUserOut]:
+    users = db.query(UserModel).order_by(UserModel.id.asc()).all()
+    return [
+        AdminUserOut(
+            id=user.id,
+            username=user.username,
+            role=user.role,
+            created_at=user.created_at,
+        )
+        for user in users
+    ]
+
+
 @app.get("/admin/users/{user_id}", response_model=UserOut)
 def admin_get_user(user_id: int, _: UserModel = Depends(require_admin), db: Session = Depends(get_db)) -> UserOut:
     user = db.query(UserModel).filter(UserModel.id == user_id).one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return UserOut(id=user.id, username=user.username, role=user.role)
+
+
+@app.delete("/admin/users/{user_id}")
+def admin_delete_user(user_id: int, _: UserModel = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
+    user = db.query(UserModel).filter(UserModel.id == user_id).one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(user)
+    db.commit()
+    return {"deleted": True}

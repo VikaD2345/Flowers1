@@ -6,7 +6,7 @@ import BuyButton from "./buy_button";
 const Popular = ({ onAddToCart, goToCatalog }) => {
     const [product, setProduct] = useState([]);
     useEffect(() => {
-        fetch("../src/popular.json")
+        fetch("http://127.0.0.1:8000/flowers")
             .then((response) => response.json())
             .then((data) => setProduct(data));
     }, []);
@@ -26,7 +26,7 @@ const Popular = ({ onAddToCart, goToCatalog }) => {
                         <img src={product.image} alt={product.title} className="popular-card-image" />
                         <div className="popular_active">
                             <div className="popular_info">
-                                <h3 className="popular-card-title">{product.title}</h3>
+                                <h3 className="popular-card-title">{product.name}</h3>
                                 <p className="popular-card-description">{product.description}</p>
                                 <p className="popular-card-price">{product.price} ₽</p>
                             </div>
