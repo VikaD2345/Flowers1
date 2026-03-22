@@ -1,4 +1,4 @@
-import "../main.css";
+import "./Benefits.css";
 
 const Benefits = () => {
     return (

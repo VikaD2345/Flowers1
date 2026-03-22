@@ -1,5 +1,5 @@
 import React from 'react';
-import "../main.css";
+import "./Footer.css";
 
 const Footer = () => {
   const scrollToTop = () => {

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import "../main.css";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 const REGISTER_URL = import.meta.env.VITE_REGISTER_URL ?? `${API_BASE_URL}/auth/register`;

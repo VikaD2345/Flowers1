@@ -1,0 +1,115 @@
+.location {
+  width: 100%;
+  min-height: 640px;
+  margin-top: 80px;
+  padding: 40px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.18)),
+    url("../assets/cover2.png");
+  background-position: center;
+  background-size: cover;
+}
+
+.location-info {
+  width: min(100%, 500px);
+  min-height: 360px;
+  border-radius: 6px;
+  background: rgba(247, 247, 247, 0.97);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 24px;
+}
+
+.location-icon {
+  width: 54px;
+  height: 54px;
+  margin-bottom: 14px;
+}
+
+.location-title {
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 900;
+  color: #665f5f;
+  margin-bottom: 16px;
+}
+
+.location-address {
+  color: #6f6969;
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.location-address br {
+  display: block;
+}
+
+@media (max-width: 1024px) {
+  .location-title {
+    font-size: 42px;
+  }
+}
+
+@media (max-width: 768px) {
+  .location {
+    min-height: 500px;
+    margin-top: 56px;
+    padding: 24px 16px;
+  }
+
+  .location-info {
+    min-height: 300px;
+    padding: 24px 16px;
+  }
+
+  .location-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .location-address {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 480px) {
+  .location {
+    padding-left: 12px;
+    padding-right: 12px;
+    min-height: 420px;
+    margin-top: 40px;
+  }
+
+  .location-info {
+    min-height: 260px;
+    border-radius: 10px;
+    padding: 18px 12px;
+  }
+
+  .location-icon {
+    width: 42px;
+    height: 42px;
+    margin-bottom: 10px;
+  }
+
+  .location-title {
+    font-size: 28px;
+    margin-bottom: 10px;
+  }
+
+  .location-address {
+    font-size: 15px;
+  }
+
+  .location-address br {
+    display: none;
+  }
+}

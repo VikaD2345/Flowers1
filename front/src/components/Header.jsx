@@ -1,7 +1,7 @@
 import { useState } from "react";
-import "../main.css";
+import "./Header.css";
 
-function Header({ onNavigate, currentPage }) {
+function Header({ onNavigate, currentPage, onOpenProfile }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const closeMenu = () => setIsMenuOpen(false);
@@ -32,19 +32,17 @@ function Header({ onNavigate, currentPage }) {
         </button>
 
         <nav className={`nav ${isMenuOpen ? "is-open" : ""}`}>
-          <a href="#" onClick={(event) => handleNavigate(event, "catalog")} className={currentPage === "catalog" ? "is-active" : ""}>Каталог</a>
-          <a href="#" onClick={(event) => handleNavigate(event, "home")} className={currentPage === "home" ? "is-active" : ""}>О нас</a>
-          <a href="#" onClick={(event) => handleNavigate(event, "cart")} className={currentPage === "cart" ? "is-active" : ""}>Корзина</a>
           <a href="#" onClick={(event) => handleNavigate(event, "home")} className={currentPage === "home" ? "is-active" : ""}>Главная</a>
+          <a href="#" onClick={(event) => handleNavigate(event, "catalog")} className={currentPage === "catalog" ? "is-active" : ""}>Каталог</a>
+          <a href="#" onClick={(event) => handleNavigate(event, "cart")} className={currentPage === "cart" ? "is-active" : ""}>Корзина</a>
         </nav>
 
         <div className="actions">
-          <input type="text" placeholder="Поиск" />
           <button
             type="button"
             className="profile"
-            onClick={(event) => handleNavigate(event, "register")}
-            aria-label="Открыть страницу регистрации"
+            onClick={onOpenProfile}
+            aria-label="Открыть страницу входа и регистрации"
           >
             <img src="./src/assets/Vector.png" alt="" className="profileImg"></img>
           </button>

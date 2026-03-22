@@ -1,0 +1,30 @@
+.popular-card-button {
+  min-width: 160px;
+  height: 40px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #665f5f;
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.popular-card-button:hover {
+  background-color: #544b4b;
+  transform: scale(1.05);
+}
+
+@media (max-width: 1024px) {
+  .popular-card-button {
+    width: 100%;
+  }
+}

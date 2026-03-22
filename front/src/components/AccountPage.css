@@ -1,0 +1,389 @@
+.account-page {
+  position: relative;
+  overflow: hidden;
+  padding: 48px 20px 96px;
+  background: -1px 0 0 0 rgb(255, 255, 255 / 40%);
+  min-height: calc(100vh - 220px);
+}
+
+.account-page__inner {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+}
+
+.account-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.account-page-label {
+  color: #a98692;
+  font-size: 14px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.account-topbar-link {
+  border: none;
+  background: transparent;
+  color: #8f6f79;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.account-card {
+  width: 100%;
+  max-width: 920px;
+  background: rgba(243, 241, 243, 0.88);
+  border: 1px solid rgba(241, 215, 223, 0.95);
+  border-radius: 42px;
+  box-shadow: 0 20px 50px rgba(125, 87, 104, 0.12);
+  padding: 42px;
+  animation: accountCardIn 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.account-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 28px;
+  padding: 8px;
+  border-radius: 999px;
+  background: #ead5dd;
+  width: fit-content;
+}
+
+.account-tab {
+  border: none;
+  background: transparent;
+  color: #8f6f79;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 12px 22px;
+  border-radius: 999px;
+}
+
+.account-tab.is-active {
+  background: linear-gradient(135deg, #f4acbd, #efc1cb);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(203, 122, 147, 0.22);
+}
+
+.account-hero {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-bottom: 30px;
+}
+
+.account-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #f4acbd, #e88fa7);
+  color: #fff;
+  font-size: 34px;
+  font-weight: 900;
+  box-shadow: 0 14px 28px rgba(203, 122, 147, 0.26);
+}
+
+.account-kicker {
+  color: #9a7d86;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.account-name {
+  color: #666064;
+  font-size: 42px;
+  line-height: 1;
+  margin: 0;
+}
+
+.account-role {
+  color: #8f6f79;
+  font-size: 18px;
+  margin-top: 8px;
+}
+
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.account-stat {
+  padding: 20px 22px;
+  border-radius: 26px;
+  background: #fff;
+  border: 1px solid #f1d7df;
+}
+
+.account-stat span {
+  display: block;
+  color: #a48e96;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.account-stat strong {
+  color: #665f64;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.account-note {
+  color: #7f7378;
+  font-size: 16px;
+  line-height: 1.5;
+  margin-bottom: 28px;
+}
+
+.account-actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.account-primary-action {
+  margin-top: 0;
+  width: auto;
+  min-width: 240px;
+}
+
+.account-secondary-action {
+  width: auto;
+  min-width: 180px;
+  height: 62px;
+  border: 2px solid #efc1cb;
+  border-radius: 999px;
+  background: transparent;
+  color: #8f6f79;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.account-logout-link {
+  display: block;
+  margin: auto 0 auto auto;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: #8f6f79;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.account-orders-head {
+  margin-bottom: 24px;
+}
+
+.account-orders-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: flex-start;
+  padding: 28px;
+  border-radius: 28px;
+  background: #fff;
+}
+
+.account-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.account-order-card {
+  padding: 24px;
+  border-radius: 28px;
+  background: #fff;
+  border: 1px solid #f1d7df;
+}
+
+.account-order-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.account-order-id {
+  color: #665f64;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.account-order-date {
+  color: #a48e96;
+  font-size: 14px;
+}
+
+.account-order-status {
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: #f7dce4;
+  color: #b15e79;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.account-order-details {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  color: #7f7378;
+}
+
+.account-order-details p {
+  margin: 0;
+}
+
+.account-order-items {
+  display: grid;
+  gap: 12px;
+}
+
+.account-order-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.account-order-item-image {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 18px;
+}
+
+.account-order-item h3 {
+  margin: 0 0 2px;
+  font-size: 18px;
+  color: #665f64;
+}
+
+.account-order-item p {
+  margin: 0;
+  color: #8f6f79;
+}
+
+.register-submit {
+  width: 100%;
+  margin-top: 4px;
+  height: 74px;
+  border: none;
+  border-radius: 999px;
+  background: #f4acbd;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@keyframes accountCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 1024px) {
+  .account-name {
+    font-size: 38px;
+  }
+
+  .account-card {
+    max-width: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .account-page {
+    padding: 30px 14px 56px;
+  }
+
+  .account-topbar {
+    margin-bottom: 18px;
+  }
+
+  .account-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+
+  .account-avatar {
+    width: 68px;
+    height: 68px;
+    font-size: 28px;
+  }
+
+  .account-name {
+    font-size: 34px;
+  }
+
+  .account-role {
+    font-size: 16px;
+  }
+
+  .account-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .account-stat {
+    padding: 16px 18px;
+    border-radius: 20px;
+  }
+
+  .account-stat strong {
+    font-size: 22px;
+  }
+
+  .account-note {
+    font-size: 15px;
+    margin-bottom: 22px;
+  }
+
+  .account-actions {
+    flex-direction: column;
+  }
+
+  .account-primary-action,
+  .account-secondary-action {
+    width: 100%;
+    min-width: 0;
+    height: 54px;
+    font-size: 15px;
+  }
+
+  .account-logout-link {
+    margin: 0 auto;
+    font-size: 13px;
+  }
+
+  .account-tabs {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .account-order-meta {
+    flex-direction: column;
+  }
+}

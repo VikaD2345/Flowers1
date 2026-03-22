@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import products from "../product.json";
-import "../main.css";
 import BuyButton from "./buy_button";
+import "./CatalogPage.css";
 
 const PAGE_SIZE = 6;
 

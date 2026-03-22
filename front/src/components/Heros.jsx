@@ -1,4 +1,4 @@
-import "../main.css";
+import "./Heros.css";
 
 const Main = () => {
   return (
@@ -6,8 +6,7 @@ const Main = () => {
         <div className="cover">
             <img className="cover-img" alt="Цветочная композиция" src="./src/assets/cover.png"></img>
             <div className="cover-text">
-                <h1 className="cover-title">Доставка цветов</h1>
-                <p>Цветы для любого случая <br/><strong>Доставляем самые свежие цветы <br/> в Москве</strong></p>
+                <h1 className="cover-title">Разве для Цветов <br /> нужен повод ?</h1>
             </div>
         </div>
     </main> 

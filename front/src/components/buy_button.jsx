@@ -1,4 +1,5 @@
-import "../main.css";
+import "./buy_button.css";
+
 const BuyButton = ({ onClick }) => {
     return (
         <button className="popular-card-button" onClick={onClick} type="button">В корзину</button>

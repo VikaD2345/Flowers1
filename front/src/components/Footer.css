@@ -1,0 +1,33 @@
+.footer {
+  background: #fff;
+  box-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
+  padding: 15px 0;
+  box-sizing: border-box;
+}
+
+.footer-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.footer-container img {
+  width: 90px;
+  height: 80px;
+}
+
+.up {
+  width: 90px;
+  height: 80px;
+  cursor: pointer;
+}
+
+.footer-copy {
+  font-size: 10px;
+  color: #665f5f;
+  text-align: start;
+}

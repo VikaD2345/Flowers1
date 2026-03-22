@@ -1,21 +1,15 @@
-import { useState, useEffect } from "react";
-import "../main.css";
 import BuyButton from "./buy_button";
+import popularData from "../popular.json";
+import "./Popular.css";
 
 
 const Popular = ({ onAddToCart, goToCatalog }) => {
-    const [product, setProduct] = useState([]);
-    useEffect(() => {
-        fetch("http://127.0.0.1:8000/flowers")
-            .then((response) => response.json())
-            .then((data) => setProduct(data));
-    }, []);
-    if (!product) {
-        return <div>Loading...</div>;
-    }
+    const product = popularData;
+
     if (product.length === 0) {
         return <div>No products found.</div>;
     }
+
     if (product.length > 0) {
     return (
         <section className="popular">
@@ -26,7 +20,7 @@ const Popular = ({ onAddToCart, goToCatalog }) => {
                         <img src={product.image} alt={product.title} className="popular-card-image" />
                         <div className="popular_active">
                             <div className="popular_info">
-                                <h3 className="popular-card-title">{product.name}</h3>
+                                <h3 className="popular-card-title">{product.title}</h3>
                                 <p className="popular-card-description">{product.description}</p>
                                 <p className="popular-card-price">{product.price} ₽</p>
                             </div>
@@ -40,5 +34,8 @@ const Popular = ({ onAddToCart, goToCatalog }) => {
             </button>
         </section>
     );
-}}
+    }
+
+    return null;
+}
 export default Popular;
