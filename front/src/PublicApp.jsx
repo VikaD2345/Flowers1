@@ -13,6 +13,7 @@ import CatalogPage from "./components/CatalogPage";
 import AuthPage from "./components/AuthPage";
 import AccountPage from "./components/AccountPage";
 import CheckoutPage from "./components/CheckoutPage";
+import FlowerAssistant from "./components/FlowerAssistant";
 import { getSessionUser, logoutLocalUser } from "./utils/authStorage";
 import { createOrder, getOrdersByUserId } from "./utils/orderStorage";
 
@@ -121,10 +122,13 @@ export default function PublicApp() {
 
   if (currentPage === "auth") {
     return (
-      <AuthPage
-        onBackHome={() => setCurrentPage("home")}
-        onAuthSuccess={handleAuthSuccess}
-      />
+      <>
+        <AuthPage
+          onBackHome={() => setCurrentPage("home")}
+          onAuthSuccess={handleAuthSuccess}
+        />
+        <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
+      </>
     );
   }
 
@@ -145,6 +149,7 @@ export default function PublicApp() {
           onLogout={handleLogout}
         />
         <Footer />
+        <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
       </div>
     );
   }
@@ -163,6 +168,7 @@ export default function PublicApp() {
           onSubmitOrder={handleOrderSubmit}
         />
         <Footer />
+        <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
       </div>
     );
   }
@@ -196,7 +202,7 @@ export default function PublicApp() {
         />
       )}
       <Footer />
+      <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
     </div>
   );
 }
-
