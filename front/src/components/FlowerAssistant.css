@@ -1,0 +1,292 @@
+.flower-assistant {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.flower-assistant-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  border: none;
+  border-radius: 999px;
+  padding: 14px 18px 14px 14px;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.28), transparent 58%),
+    linear-gradient(135deg, #5f3b32, #876457);
+  box-shadow: 0 18px 40px rgba(73, 46, 38, 0.34);
+  color: #fff8f1;
+}
+
+.flower-assistant-trigger span {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(255, 248, 241, 0.18);
+  font-family: "Kudry", sans-serif;
+  font-size: 21px;
+  letter-spacing: 0.05em;
+}
+
+.flower-assistant-trigger strong {
+  display: block;
+  max-width: 120px;
+  text-align: left;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.flower-assistant-panel {
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(640px, calc(100vh - 110px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(117, 88, 79, 0.2);
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 245, 0.98), rgba(255, 255, 255, 0.98)),
+    #fff;
+  box-shadow: 0 28px 70px rgba(71, 48, 41, 0.28);
+  backdrop-filter: blur(12px);
+}
+
+.flower-assistant-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid rgba(117, 88, 79, 0.12);
+  background:
+    radial-gradient(circle at top left, rgba(171, 119, 98, 0.2), transparent 44%),
+    linear-gradient(135deg, #fff8f1, #fffdfb);
+}
+
+.flower-assistant-eyebrow {
+  margin: 0 0 2px;
+  color: #9a6c5c;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.flower-assistant-title {
+  margin: 0;
+  color: #4d352e;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.flower-assistant-close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(95, 59, 50, 0.08);
+  color: #5f3b32;
+  font-size: 28px;
+  line-height: 1;
+  transform: rotate(45deg);
+}
+
+.flower-assistant-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at right top, rgba(240, 220, 211, 0.42), transparent 34%),
+    linear-gradient(180deg, #fffdfb, #fff7f2);
+}
+
+.flower-assistant-message {
+  max-width: 86%;
+  padding: 12px 14px;
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(101, 75, 65, 0.08);
+}
+
+.flower-assistant-message p {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.flower-assistant-message--assistant {
+  align-self: flex-start;
+  border-bottom-left-radius: 6px;
+  background: #fff;
+  color: #4c3b34;
+}
+
+.flower-assistant-message--user {
+  align-self: flex-end;
+  border-bottom-right-radius: 6px;
+  background: linear-gradient(135deg, #6e4d42, #8d675b);
+  color: #fff7f2;
+}
+
+.flower-assistant-message.is-error {
+  background: #fff1ef;
+  color: #8e3d32;
+}
+
+.flower-assistant-message--loading {
+  opacity: 0.8;
+}
+
+.flower-assistant-recommendations {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.flower-assistant-product {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  background: #fff7f2;
+}
+
+.flower-assistant-product h3 {
+  margin: 0 0 2px;
+  color: #4d352e;
+  font-size: 19px;
+  line-height: 1.1;
+}
+
+.flower-assistant-product p {
+  margin: 0;
+  font-size: 15px;
+  color: #7c6258;
+}
+
+.flower-assistant-product span {
+  display: inline-block;
+  margin-top: 4px;
+  color: #5f3b32;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.flower-assistant-product button,
+.flower-assistant-link,
+.flower-assistant-form button,
+.flower-assistant-quick-actions button {
+  border: none;
+  border-radius: 999px;
+}
+
+.flower-assistant-product button,
+.flower-assistant-form button {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  background: #5f3b32;
+  color: #fff;
+  font-size: 15px;
+}
+
+.flower-assistant-link {
+  align-self: flex-start;
+  padding: 0;
+  background: transparent;
+  color: #7a4f42;
+  font-size: 16px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.flower-assistant-quick-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 18px 16px;
+  overflow-x: auto;
+}
+
+.flower-assistant-quick-actions button {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  background: rgba(95, 59, 50, 0.08);
+  color: #5f3b32;
+  font-size: 15px;
+}
+
+.flower-assistant-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 0 18px 18px;
+}
+
+.flower-assistant-form input {
+  min-width: 0;
+  height: 48px;
+  border: 1px solid rgba(124, 98, 88, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0 18px;
+  font-size: 16px;
+  color: #4c3b34;
+}
+
+.flower-assistant-form input::placeholder {
+  color: #9d867f;
+}
+
+.flower-assistant-quick-actions button:disabled,
+.flower-assistant-form input:disabled,
+.flower-assistant-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .flower-assistant {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    align-items: stretch;
+  }
+
+  .flower-assistant-panel {
+    width: 100%;
+    max-height: min(72vh, 620px);
+  }
+
+  .flower-assistant-trigger {
+    justify-content: center;
+    align-self: flex-end;
+  }
+
+  .flower-assistant-message {
+    max-width: 92%;
+  }
+
+  .flower-assistant-product {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .flower-assistant-product button,
+  .flower-assistant-form button {
+    width: 100%;
+  }
+
+  .flower-assistant-form {
+    grid-template-columns: 1fr;
+  }
+}
