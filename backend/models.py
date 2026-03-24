@@ -8,8 +8,10 @@ from sqlalchemy import (
     Enum as SAEnum,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -102,3 +104,22 @@ class OrderItemModel(Base):
 
     order: Mapped[OrderModel] = relationship(back_populates="items")
     flower: Mapped[FlowerModel] = relationship(back_populates="order_items")
+
+
+class AuditLogModel(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("app_users.id"), index=True, nullable=True)
+    actor_username: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    action: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    entity: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    entity_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+
+    before: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    after: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+
+    actor: Mapped[UserModel | None] = relationship()

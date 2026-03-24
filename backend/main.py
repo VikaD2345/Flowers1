@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timedelta, timezone
 
+from fastapi.encoders import jsonable_encoder
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from database import Base, engine, get_db
 from models import (
+    AuditLogModel,
     CartItemModel,
     FlowerModel,
     OrderItemModel,
@@ -111,6 +113,31 @@ def require_admin(user: UserModel = Depends(get_current_user)) -> UserModel:
     return user
 
 
+def _audit(
+    *,
+    db: Session,
+    actor: UserModel,
+    action: str,
+    entity: str,
+    entity_id: int | None = None,
+    before: dict | None = None,
+    after: dict | None = None,
+    meta: dict | None = None,
+) -> None:
+    row = AuditLogModel(
+        actor_user_id=actor.id,
+        actor_username=actor.username,
+        action=action,
+        entity=entity,
+        entity_id=entity_id,
+        before=jsonable_encoder(before) if before is not None else None,
+        after=jsonable_encoder(after) if after is not None else None,
+        meta=jsonable_encoder(meta) if meta is not None else None,
+    )
+    db.add(row)
+    db.commit()
+
+
 class FlowerBase(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     price: float = Field(ge=0)
@@ -188,6 +215,18 @@ class OrderStatusUpdate(BaseModel):
     status: OrderStatus
 
 
+class AuditLogOut(BaseModel):
+    id: int
+    actor_username: str
+    action: str
+    entity: str
+    entity_id: int | None
+    before: dict | None
+    after: dict | None
+    meta: dict | None
+    created_at: datetime
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -243,12 +282,20 @@ def get_flower(flower_id: int, db: Session = Depends(get_db)) -> FlowerOut:
 def admin_create_flower(
     payload: FlowerCreate,
     db: Session = Depends(get_db),
-    _: UserModel = Depends(require_admin),
+    admin: UserModel = Depends(require_admin),
 ) -> FlowerOut:
     row = FlowerModel(name=payload.name, price=payload.price, image_url=str(payload.image_url))
     db.add(row)
     db.commit()
     db.refresh(row)
+    _audit(
+        db=db,
+        actor=admin,
+        action="create",
+        entity="flower",
+        entity_id=row.id,
+        after={"id": row.id, "name": row.name, "price": float(row.price), "image_url": row.image_url},
+    )
     return FlowerOut(id=row.id, name=row.name, price=float(row.price), image_url=row.image_url)
 
 
@@ -257,12 +304,13 @@ def admin_update_flower(
     flower_id: int,
     payload: FlowerUpdate,
     db: Session = Depends(get_db),
-    _: UserModel = Depends(require_admin),
+    admin: UserModel = Depends(require_admin),
 ) -> FlowerOut:
     row = db.query(FlowerModel).filter(FlowerModel.id == flower_id).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Flower not found")
 
+    before = {"id": row.id, "name": row.name, "price": float(row.price), "image_url": row.image_url}
     if payload.name is not None:
         row.name = payload.name
     if payload.price is not None:
@@ -272,6 +320,16 @@ def admin_update_flower(
 
     db.commit()
     db.refresh(row)
+    after = {"id": row.id, "name": row.name, "price": float(row.price), "image_url": row.image_url}
+    _audit(
+        db=db,
+        actor=admin,
+        action="update",
+        entity="flower",
+        entity_id=row.id,
+        before=before,
+        after=after,
+    )
     return FlowerOut(id=row.id, name=row.name, price=float(row.price), image_url=row.image_url)
 
 
@@ -279,13 +337,22 @@ def admin_update_flower(
 def admin_delete_flower(
     flower_id: int,
     db: Session = Depends(get_db),
-    _: UserModel = Depends(require_admin),
+    admin: UserModel = Depends(require_admin),
 ) -> dict:
     row = db.query(FlowerModel).filter(FlowerModel.id == flower_id).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Flower not found")
+    before = {"id": row.id, "name": row.name, "price": float(row.price), "image_url": row.image_url}
     db.delete(row)
     db.commit()
+    _audit(
+        db=db,
+        actor=admin,
+        action="delete",
+        entity="flower",
+        entity_id=flower_id,
+        before=before,
+    )
     return {"deleted": True}
 
 
@@ -547,7 +614,7 @@ def admin_list_orders(_: UserModel = Depends(require_admin), db: Session = Depen
 def admin_update_order_status(
     order_id: int,
     payload: OrderStatusUpdate,
-    _: UserModel = Depends(require_admin),
+    admin: UserModel = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> OrderOut:
     order = (
@@ -559,9 +626,19 @@ def admin_update_order_status(
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    before = {"id": order.id, "status": order.status.value}
     order.status = payload.status
     db.commit()
     db.refresh(order)
+    _audit(
+        db=db,
+        actor=admin,
+        action="update_status",
+        entity="order",
+        entity_id=order.id,
+        before=before,
+        after={"id": order.id, "status": order.status.value},
+    )
 
     return OrderOut(
         id=order.id,
@@ -605,11 +682,70 @@ def admin_get_user(user_id: int, _: UserModel = Depends(require_admin), db: Sess
     return UserOut(id=user.id, username=user.username, role=user.role)
 
 
+@app.get("/admin/audit", response_model=list[AuditLogOut])
+def admin_list_audit(
+    _: UserModel = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = 100,
+) -> list[AuditLogOut]:
+    rows = (
+        db.query(AuditLogModel)
+        .order_by(AuditLogModel.id.desc())
+        .limit(max(1, min(limit, 500)))
+        .all()
+    )
+    return [
+        AuditLogOut(
+            id=r.id,
+            actor_username=r.actor_username,
+            action=r.action,
+            entity=r.entity,
+            entity_id=r.entity_id,
+            before=r.before,
+            after=r.after,
+            meta=r.meta,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
+@app.get("/admin/audit/{audit_id}", response_model=AuditLogOut)
+def admin_get_audit(
+    audit_id: int,
+    _: UserModel = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> AuditLogOut:
+    r = db.query(AuditLogModel).filter(AuditLogModel.id == audit_id).one_or_none()
+    if r is None:
+        raise HTTPException(status_code=404, detail="Audit log not found")
+    return AuditLogOut(
+        id=r.id,
+        actor_username=r.actor_username,
+        action=r.action,
+        entity=r.entity,
+        entity_id=r.entity_id,
+        before=r.before,
+        after=r.after,
+        meta=r.meta,
+        created_at=r.created_at,
+    )
+
+
 @app.delete("/admin/users/{user_id}")
-def admin_delete_user(user_id: int, _: UserModel = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
+def admin_delete_user(user_id: int, admin: UserModel = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
     user = db.query(UserModel).filter(UserModel.id == user_id).one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    before = {"id": user.id, "username": user.username, "role": user.role.value}
     db.delete(user)
     db.commit()
+    _audit(
+        db=db,
+        actor=admin,
+        action="delete",
+        entity="user",
+        entity_id=user_id,
+        before=before,
+    )
     return {"deleted": True}
