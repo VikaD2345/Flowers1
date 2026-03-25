@@ -5,7 +5,7 @@
 ### Backend
 ```powershell
 cd d:\flowers-app\backend
-.\venv\Scripts\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+.\venv\Scripts\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8100
 ```
 
 ### Frontend
@@ -18,7 +18,7 @@ npm.cmd run dev
 ### URLs
 - Site: `http://localhost:5173`
 - Admin: `http://localhost:5173/admin`
-- API: `http://127.0.0.1:8000`
+- API: `http://127.0.0.1:8100`
 
 ## Admin
 
@@ -68,7 +68,7 @@ OLLAMA_TIMEOUT_SECONDS=45
 ### Health check
 Check that backend can reach Ollama:
 ```powershell
-curl http://127.0.0.1:8000/assistant/health
+curl http://127.0.0.1:8100/assistant/health
 ```
 
 Expected response shape:

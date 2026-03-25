@@ -8,10 +8,11 @@ from pathlib import Path
 from fastapi.encoders import jsonable_encoder
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session, joinedload
@@ -52,6 +53,9 @@ BOOTSTRAP_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 BOOTSTRAP_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+OLLAMA_REPLY_MODEL = os.getenv("OLLAMA_REPLY_MODEL", OLLAMA_MODEL)
+OLLAMA_EXTRACTION_MODEL = os.getenv("OLLAMA_EXTRACTION_MODEL", OLLAMA_REPLY_MODEL)
+OLLAMA_EXTRACT_WITH_LLM = os.getenv("OLLAMA_EXTRACT_WITH_LLM", "false").lower() == "true"
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "45"))
 
 # bcrypt currently has compatibility issues on some Python builds (e.g. 3.14 on Windows),
@@ -215,6 +219,14 @@ class FlowerBase(BaseModel):
     category: str = Field(default="Другое", min_length=1, max_length=255)
     price: float = Field(ge=0)
     image_url: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _coerce_description(cls, v: object) -> str:
+        # DB may contain NULL for description; API must still return valid strings.
+        if v is None:
+            return ""
+        return str(v)
 
 
 class FlowerCreate(FlowerBase):
@@ -408,8 +420,23 @@ def _extract_criteria_fallback(messages: list[AssistantMessageIn]) -> dict:
 
 
 def _call_ollama(*, messages: list[dict], json_mode: bool = False, temperature: float = 0.2) -> str:
+    return _call_ollama_with_model(
+        messages=messages,
+        model=OLLAMA_REPLY_MODEL,
+        json_mode=json_mode,
+        temperature=temperature,
+    )
+
+
+def _call_ollama_with_model(
+    *,
+    messages: list[dict],
+    model: str,
+    json_mode: bool = False,
+    temperature: float = 0.2,
+) -> str:
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": model,
         "messages": messages,
         "stream": False,
         "options": {"temperature": temperature},
@@ -440,6 +467,49 @@ def _call_ollama(*, messages: list[dict], json_mode: bool = False, temperature: 
         raise HTTPException(status_code=502, detail="Invalid response from Ollama") from exc
 
 
+def _stream_ollama(
+    *,
+    messages: list[dict],
+    model: str,
+    temperature: float = 0.2,
+):
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "options": {"temperature": temperature},
+    }
+
+    req = urllib_request.Request(
+        f"{OLLAMA_BASE_URL}/api/chat",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib_request.urlopen(req, timeout=OLLAMA_TIMEOUT_SECONDS) as response:
+            for raw_line in response:
+                line = raw_line.decode("utf-8").strip()
+                if not line:
+                    continue
+                try:
+                    chunk = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                message = chunk.get("message") or {}
+                content = message.get("content") or ""
+                if content:
+                    yield content
+                if chunk.get("done"):
+                    break
+    except urllib_error.URLError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Ollama is unavailable at {OLLAMA_BASE_URL}: {exc.reason}",
+        ) from exc
+
+
 def _extract_criteria_with_ollama(messages: list[AssistantMessageIn]) -> dict:
     conversation = "\n".join(f"{item.role}: {item.content}" for item in messages)
     prompt = [
@@ -450,7 +520,12 @@ def _extract_criteria_with_ollama(messages: list[AssistantMessageIn]) -> dict:
         {"role": "user", "content": conversation},
     ]
 
-    content = _call_ollama(messages=prompt, json_mode=True, temperature=0)
+    content = _call_ollama_with_model(
+        messages=prompt,
+        model=OLLAMA_EXTRACTION_MODEL,
+        json_mode=True,
+        temperature=0,
+    )
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError:
@@ -485,6 +560,31 @@ def _extract_criteria_with_ollama(messages: list[AssistantMessageIn]) -> dict:
         if needs_budget
         else None,
         "search_summary": parsed.get("search_summary") or conversation,
+    }
+
+
+def _extract_criteria(messages: list[AssistantMessageIn]) -> dict:
+    fallback = _extract_criteria_fallback(messages)
+    if not OLLAMA_EXTRACT_WITH_LLM:
+        return fallback
+
+    has_enough_signal = bool(fallback.get("budget_max") is not None and (fallback.get("style") or fallback.get("recipient")))
+    if has_enough_signal:
+        return fallback
+
+    try:
+        parsed = _extract_criteria_with_ollama(messages)
+    except HTTPException:
+        return fallback
+
+    return {
+        "style": parsed.get("style") or fallback.get("style"),
+        "recipient": parsed.get("recipient") or fallback.get("recipient"),
+        "budget_text": parsed.get("budget_text") or fallback.get("budget_text"),
+        "budget_max": parsed.get("budget_max") if parsed.get("budget_max") is not None else fallback.get("budget_max"),
+        "needs_budget": parsed.get("needs_budget", fallback.get("needs_budget")),
+        "clarification_question": parsed.get("clarification_question") or fallback.get("clarification_question"),
+        "search_summary": parsed.get("search_summary") or fallback.get("search_summary"),
     }
 
 
@@ -598,7 +698,49 @@ def _build_assistant_reply(
         },
     ]
 
-    return _call_ollama(messages=prompt, json_mode=False, temperature=0.4).strip()
+    return _call_ollama_with_model(
+        messages=prompt,
+        model=OLLAMA_REPLY_MODEL,
+        json_mode=False,
+        temperature=0.4,
+    ).strip()
+
+
+def _stream_assistant_reply(
+    *,
+    criteria: dict,
+    products: list[AssistantProductOut],
+):
+    products_json = json.dumps([product.model_dump() for product in products], ensure_ascii=False)
+    criteria_json = json.dumps(
+        {
+            "style": criteria.get("style"),
+            "recipient": criteria.get("recipient"),
+            "budget_text": criteria.get("budget_text"),
+            "budget_max": criteria.get("budget_max"),
+        },
+        ensure_ascii=False,
+    )
+
+    prompt = [
+        {
+            "role": "system",
+            "content": RECOMMENDATION_SYSTEM_PROMPT,
+        },
+        {
+            "role": "user",
+            "content": (
+                f"РљСЂРёС‚РµСЂРёРё РєР»РёРµРЅС‚Р°: {criteria_json}\n"
+                f"РќР°Р№РґРµРЅРЅС‹Рµ С‚РѕРІР°СЂС‹: {products_json}"
+            ),
+        },
+    ]
+
+    return _stream_ollama(messages=prompt, model=OLLAMA_REPLY_MODEL, temperature=0.4)
+
+
+def _sse_event(payload: dict) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 @app.get("/health")
@@ -626,7 +768,7 @@ def assistant_health() -> dict:
     return {
         "status": "ok",
         "provider": "ollama",
-        "model": OLLAMA_MODEL,
+        "model": OLLAMA_REPLY_MODEL,
         "base_url": OLLAMA_BASE_URL,
         "reply": reply,
     }
@@ -634,7 +776,7 @@ def assistant_health() -> dict:
 
 @app.post("/assistant/chat", response_model=AssistantChatResponse)
 def assistant_chat(payload: AssistantChatRequest, db: Session = Depends(get_db)) -> AssistantChatResponse:
-    criteria = _extract_criteria_with_ollama(payload.messages)
+    criteria = _extract_criteria(payload.messages)
 
     criteria_out = AssistantCriteriaOut(
         style=criteria.get("style"),
@@ -650,7 +792,7 @@ def assistant_chat(payload: AssistantChatRequest, db: Session = Depends(get_db))
             needs_clarification=True,
             criteria=criteria_out,
             products=[],
-            source=f"ollama:{OLLAMA_MODEL}",
+            source=f"ollama:{OLLAMA_REPLY_MODEL}",
         )
 
     try:
@@ -677,8 +819,93 @@ def assistant_chat(payload: AssistantChatRequest, db: Session = Depends(get_db))
         needs_clarification=False,
         criteria=criteria_out,
         products=products,
-        source=f"ollama:{OLLAMA_MODEL}",
+        source=f"ollama:{OLLAMA_REPLY_MODEL}",
     )
+
+
+@app.post("/assistant/chat/stream")
+def assistant_chat_stream(payload: AssistantChatRequest, db: Session = Depends(get_db)) -> StreamingResponse:
+    def event_stream():
+        criteria = _extract_criteria(payload.messages)
+        criteria_out = AssistantCriteriaOut(
+            style=criteria.get("style"),
+            recipient=criteria.get("recipient"),
+            budget_text=criteria.get("budget_text"),
+            budget_max=criteria.get("budget_max"),
+        )
+
+        if criteria.get("needs_budget"):
+            reply = criteria.get("clarification_question") or "РџРѕРґСЃРєР°Р¶РёС‚Рµ, РїРѕР¶Р°Р»СѓР№СЃС‚Р°, РІ РєР°РєРѕРј Р±СЋРґР¶РµС‚Рµ РїРѕРґРѕР±СЂР°С‚СЊ РІР°СЂРёР°РЅС‚С‹?"
+            yield _sse_event(
+                {
+                    "type": "done",
+                    "reply": reply,
+                    "criteria": criteria_out.model_dump(),
+                    "products": [],
+                    "needs_clarification": True,
+                    "source": f"ollama:{OLLAMA_REPLY_MODEL}",
+                }
+            )
+            return
+
+        try:
+            products = search_products(
+                db=db,
+                style=criteria.get("style"),
+                recipient=criteria.get("recipient"),
+                budget_max=criteria.get("budget_max"),
+                limit=payload.limit,
+            )
+        except SQLAlchemyError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Database is unavailable. Connect Radmin VPN and ensure PostgreSQL is reachable "
+                    "before requesting consultant recommendations."
+                ),
+            ) from exc
+
+        if not products:
+            reply = _build_assistant_reply(criteria=criteria, products=products)
+            yield _sse_event(
+                {
+                    "type": "done",
+                    "reply": reply,
+                    "criteria": criteria_out.model_dump(),
+                    "products": [],
+                    "needs_clarification": False,
+                    "source": f"ollama:{OLLAMA_REPLY_MODEL}",
+                }
+            )
+            return
+
+        yield _sse_event(
+            {
+                "type": "meta",
+                "criteria": criteria_out.model_dump(),
+                "products": [product.model_dump() for product in products],
+                "needs_clarification": False,
+                "source": f"ollama:{OLLAMA_REPLY_MODEL}",
+            }
+        )
+
+        reply_parts: list[str] = []
+        for chunk in _stream_assistant_reply(criteria=criteria, products=products):
+            reply_parts.append(chunk)
+            yield _sse_event({"type": "delta", "delta": chunk})
+
+        yield _sse_event(
+            {
+                "type": "done",
+                "reply": "".join(reply_parts).strip(),
+                "criteria": criteria_out.model_dump(),
+                "products": [product.model_dump() for product in products],
+                "needs_clarification": False,
+                "source": f"ollama:{OLLAMA_REPLY_MODEL}",
+            }
+        )
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.post("/auth/register", response_model=UserOut)
@@ -716,17 +943,23 @@ def me(current_user: UserModel = Depends(get_current_user)) -> UserOut:
 @app.get("/flowers", response_model=list[FlowerOut])
 def list_flowers(db: Session = Depends(get_db)) -> list[FlowerOut]:
     rows = db.query(FlowerModel).order_by(FlowerModel.id.asc()).all()
-    return [
-        FlowerOut(
-            id=r.id,
-            name=r.name,
-            description=r.description,
-            category=r.category,
-            price=float(r.price),
-            image_url=r.image_url,
-        )
-        for r in rows
-    ]
+    flowers: list[FlowerOut] = []
+    for r in rows:
+        # Защита от "битых" строк в БД (NULL/пустые значения, невалидные типы).
+        try:
+            flowers.append(
+                FlowerOut(
+                    id=r.id,
+                    name=str(r.name or "").strip(),
+                    description=r.description or "",
+                    category=str(r.category or "Другое").strip(),
+                    price=float(r.price or 0),
+                    image_url=str(r.image_url or "").strip(),
+                )
+            )
+        except Exception:
+            continue
+    return flowers
 
 
 @app.get("/flowers/{flower_id}", response_model=FlowerOut)
@@ -734,14 +967,17 @@ def get_flower(flower_id: int, db: Session = Depends(get_db)) -> FlowerOut:
     row = db.query(FlowerModel).filter(FlowerModel.id == flower_id).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Flower not found")
-    return FlowerOut(
-        id=row.id,
-        name=row.name,
-        description=row.description,
-        category=row.category,
-        price=float(row.price),
-        image_url=row.image_url,
-    )
+    try:
+        return FlowerOut(
+            id=row.id,
+            name=str(row.name or "").strip(),
+            description=row.description or "",
+            category=str(row.category or "Другое").strip(),
+            price=float(row.price or 0),
+            image_url=str(row.image_url or "").strip(),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Invalid flower data: {exc}") from exc
 
 
 @app.post("/admin/flowers", response_model=FlowerOut)

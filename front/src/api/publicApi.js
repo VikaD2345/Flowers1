@@ -1,6 +1,6 @@
 const API_BASE =
   import.meta.env.VITE_API_URL?.toString().replace(/\/+$/, "") ??
-  "http://127.0.0.1:8000";
+  "http://127.0.0.1:8100";
 
 async function readJsonSafely(res) {
   const text = await res.text();
@@ -177,4 +177,100 @@ export async function askFlowerAssistant(messages, limit = 3) {
     needsClarification: Boolean(payload?.needs_clarification),
     source: payload?.source ?? "",
   };
+}
+
+function parseSseEvent(rawEvent) {
+  const dataLines = rawEvent
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim());
+
+  if (dataLines.length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(dataLines.join("\n"));
+  } catch {
+    return null;
+  }
+}
+
+export async function streamFlowerAssistant(messages, { limit = 3, onMeta, onChunk, onDone } = {}) {
+  const res = await fetch(`${API_BASE}/assistant/chat/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify({ messages, limit }),
+  });
+
+  if (!res.ok) {
+    const payload = await readJsonSafely(res);
+    const detail =
+      payload?.detail ??
+      payload?.message ??
+      `Request failed with status ${res.status}`;
+    const err = new Error(detail);
+    err.status = res.status;
+    err.payload = payload;
+    throw err;
+  }
+
+  if (!res.body) {
+    throw new Error("Streaming response body is unavailable.");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalPayload = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+
+    for (const rawEvent of parts) {
+      const payload = parseSseEvent(rawEvent);
+      if (!payload) {
+        continue;
+      }
+
+      if (payload.type === "meta") {
+        onMeta?.({
+          criteria: payload.criteria ?? null,
+          suggestions: Array.isArray(payload.products) ? payload.products.map(normalizeFlower) : [],
+          needsClarification: Boolean(payload.needs_clarification),
+          source: payload.source ?? "",
+        });
+        continue;
+      }
+
+      if (payload.type === "delta") {
+        onChunk?.(payload.delta ?? "");
+        continue;
+      }
+
+      if (payload.type === "done") {
+        finalPayload = {
+          text: payload.reply ?? "",
+          suggestions: Array.isArray(payload.products) ? payload.products.map(normalizeFlower) : [],
+          criteria: payload.criteria ?? null,
+          needsClarification: Boolean(payload.needs_clarification),
+          source: payload.source ?? "",
+        };
+        onDone?.(finalPayload);
+      }
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  return finalPayload;
 }

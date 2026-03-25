@@ -27,9 +27,9 @@ import {
 import { getAccessToken, getSessionUser, logoutLocalUser, saveSession } from "./utils/authStorage";
 
 const PAYMENT_LABELS = {
-  card: "Банковская карта",
-  cash: "Наличными курьеру",
-  sbp: "СБП",
+  card: "Р‘Р°РЅРєРѕРІСЃРєР°СЏ РєР°СЂС‚Р°",
+  cash: "РќР°Р»РёС‡РЅС‹РјРё РєСѓСЂСЊРµСЂСѓ",
+  sbp: "РЎР‘Рџ",
 };
 
 export default function PublicApp() {
@@ -59,7 +59,7 @@ export default function PublicApp() {
         if (!isMounted) {
           return;
         }
-        setCatalogError(error.message || "Не удалось загрузить каталог из базы данных.");
+        setCatalogError(error.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РєР°С‚Р°Р»РѕРі РёР· Р±Р°Р·С‹ РґР°РЅРЅС‹С….");
       })
       .finally(() => {
         if (!isMounted) {
@@ -144,26 +144,66 @@ export default function PublicApp() {
     setCurrentPage("catalog");
   };
 
+  const buildOptimisticCartItem = (product, qty) => {
+    const productId = product.productId ?? product.id;
+    return {
+      ...product,
+      id: `pending-${productId}-${Date.now()}`,
+      cartItemId: null,
+      productId,
+      qty,
+      isPending: true,
+    };
+  };
+
   const addToCart = async (product) => {
     if (!authUser || !accessToken) {
-      setPageError("Чтобы добавить товар в корзину из базы данных, сначала войдите в аккаунт.");
+      setPageError("Р§С‚РѕР±С‹ РґРѕР±Р°РІРёС‚СЊ С‚РѕРІР°СЂ РІ РєРѕСЂР·РёРЅСѓ РёР· Р±Р°Р·С‹ РґР°РЅРЅС‹С…, СЃРЅР°С‡Р°Р»Р° РІРѕР№РґРёС‚Рµ РІ Р°РєРєР°СѓРЅС‚.");
       setCurrentPage("auth");
       return;
     }
 
+    const productId = product.productId ?? product.id;
+    const previousCartItems = cartItems;
+
+    setCartItems((prev) => {
+      const existingItem = prev.find((item) => item.productId === productId);
+      if (existingItem) {
+        return prev.map((item) =>
+          item.productId === productId ? { ...item, qty: item.qty + 1, isPending: true } : item
+        );
+      }
+      return [...prev, buildOptimisticCartItem(product, 1)];
+    });
+    setPageError("");
+    setCurrentPage("cart");
+
     try {
-      const nextItem = await addCartItem(accessToken, product.productId ?? product.id, 1);
+      const nextItem = await addCartItem(accessToken, productId, 1);
       setCartItems((prev) => {
-        const existingItem = prev.find((item) => item.id === nextItem.id);
-        if (existingItem) {
-          return prev.map((item) => (item.id === nextItem.id ? nextItem : item));
+        const result = [];
+        let inserted = false;
+
+        for (const item of prev) {
+          if (item.productId === productId || item.id === nextItem.id) {
+            if (!inserted) {
+              result.push({ ...nextItem, isPending: false });
+              inserted = true;
+            }
+            continue;
+          }
+          result.push(item);
         }
-        return [...prev, nextItem];
+
+        if (!inserted) {
+          result.push({ ...nextItem, isPending: false });
+        }
+
+        return result;
       });
-      setPageError("");
-      setCurrentPage("cart");
     } catch (error) {
-      handleApiError(error, "Не удалось добавить товар в корзину.");
+      setCartItems(previousCartItems);
+      handleApiError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ РґРѕР±Р°РІРёС‚СЊ С‚РѕРІР°СЂ РІ РєРѕСЂР·РёРЅСѓ.");
     }
   };
 
@@ -173,7 +213,7 @@ export default function PublicApp() {
       setCartItems((prev) => prev.map((entry) => (entry.id === updatedItem.id ? updatedItem : entry)));
       setPageError("");
     } catch (error) {
-      handleApiError(error, "Не удалось увеличить количество товара.");
+      handleApiError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРІРµР»РёС‡РёС‚СЊ РєРѕР»РёС‡РµСЃС‚РІРѕ С‚РѕРІР°СЂР°.");
     }
   };
 
@@ -188,7 +228,7 @@ export default function PublicApp() {
       setCartItems((prev) => prev.map((entry) => (entry.id === updatedItem.id ? updatedItem : entry)));
       setPageError("");
     } catch (error) {
-      handleApiError(error, "Не удалось уменьшить количество товара.");
+      handleApiError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРјРµРЅСЊС€РёС‚СЊ РєРѕР»РёС‡РµСЃС‚РІРѕ С‚РѕРІР°СЂР°.");
     }
   };
 
@@ -198,14 +238,14 @@ export default function PublicApp() {
       setCartItems((prev) => prev.filter((entry) => entry.id !== item.id));
       setPageError("");
     } catch (error) {
-      handleApiError(error, "Не удалось удалить товар из корзины.");
+      handleApiError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ С‚РѕРІР°СЂ РёР· РєРѕСЂР·РёРЅС‹.");
     }
   };
 
   const handleAuthSuccess = async (user) => {
     const token = getAccessToken();
     if (!token) {
-      setPageError("Сессия не была сохранена после входа.");
+      setPageError("РЎРµСЃСЃРёСЏ РЅРµ Р±С‹Р»Р° СЃРѕС…СЂР°РЅРµРЅР° РїРѕСЃР»Рµ РІС…РѕРґР°.");
       return;
     }
 
@@ -218,7 +258,7 @@ export default function PublicApp() {
       setPageError("");
       setCurrentPage("account");
     } catch (error) {
-      handleApiError(error, "Не удалось загрузить данные пользователя.");
+      handleApiError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РґР°РЅРЅС‹Рµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
     }
   };
 
@@ -261,7 +301,7 @@ export default function PublicApp() {
       setPageError("");
       setCurrentPage("account");
     } catch (error) {
-      handleApiError(error, "Не удалось оформить заказ.");
+      handleApiError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ РѕС„РѕСЂРјРёС‚СЊ Р·Р°РєР°Р·.");
     }
   };
 

@@ -2,7 +2,7 @@ import { clearAdminToken, getAdminToken } from "../auth/adminAuthStorage";
 
 const API_BASE =
   import.meta.env.VITE_API_URL?.toString().replace(/\/+$/, "") ??
-  "http://127.0.0.1:8000";
+  "http://127.0.0.1:8100";
 
 async function readJsonSafely(res) {
   const text = await res.text();

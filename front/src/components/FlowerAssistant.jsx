@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { askFlowerAssistant } from "../api/publicApi";
+import { streamFlowerAssistant } from "../api/publicApi";
 import "./FlowerAssistant.css";
 
 const QUICK_PROMPTS = [
@@ -22,25 +22,7 @@ const INITIAL_MESSAGES = [
   },
 ];
 
-function normalizeAssistantPayload(payload) {
-  if (!payload) {
-    return {
-      text: "Не удалось получить ответ от консультанта.",
-      suggestions: [],
-    };
-  }
-
-  return {
-    text: payload.text || "Консультант не вернул текст ответа.",
-    suggestions: Array.isArray(payload.suggestions) ? payload.suggestions : [],
-  };
-}
-
-async function defaultRequestAssistantReply(messages) {
-  return askFlowerAssistant(messages);
-}
-
-function FlowerAssistant({ onAddToCart, onOpenCatalog, requestAssistantReply = defaultRequestAssistantReply }) {
+function FlowerAssistant({ onAddToCart, onOpenCatalog }) {
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -59,8 +41,18 @@ function FlowerAssistant({ onAddToCart, onOpenCatalog, requestAssistantReply = d
       role: "user",
       text: trimmedText,
     };
+    const assistantMessageId = `assistant-${Date.now()}`;
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [
+      ...prev,
+      userMessage,
+      {
+        id: assistantMessageId,
+        role: "assistant",
+        text: "",
+        suggestions: [],
+      },
+    ]);
     setDraft("");
     setIsOpen(true);
     setIsLoading(true);
@@ -70,29 +62,59 @@ function FlowerAssistant({ onAddToCart, onOpenCatalog, requestAssistantReply = d
         role: message.role,
         content: message.text,
       }));
-      const payload = await requestAssistantReply(history);
-      const assistantReply = normalizeAssistantPayload(payload);
+      let finalPayload = null;
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `assistant-${Date.now()}`,
-          role: "assistant",
-          text: assistantReply.text,
-          suggestions: assistantReply.suggestions,
+      await streamFlowerAssistant(history, {
+        onChunk: (chunk) => {
+          if (!chunk) {
+            return;
+          }
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantMessageId
+                ? { ...message, text: `${message.text}${chunk}` }
+                : message
+            )
+          );
         },
-      ]);
+        onDone: (payload) => {
+          finalPayload = payload;
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantMessageId
+                ? {
+                    ...message,
+                    text: payload?.text || message.text || "Консультант не вернул текст ответа.",
+                    suggestions: Array.isArray(payload?.suggestions) ? payload.suggestions : [],
+                  }
+                : message
+            )
+          );
+        },
+      });
+
+      if (!finalPayload) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantMessageId
+              ? { ...message, text: "Не удалось получить ответ от консультанта." }
+              : message
+          )
+        );
+      }
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `assistant-error-${Date.now()}`,
-          role: "assistant",
-          text: "Не удалось получить ответ от AI-консультанта. Проверьте backend API, Ollama и доступность базы данных.",
-          suggestions: [],
-          isError: true,
-        },
-      ]);
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === assistantMessageId
+            ? {
+                ...message,
+                text: "Не удалось получить ответ от AI-консультанта. Проверьте backend API, Ollama и доступность базы данных.",
+                suggestions: [],
+                isError: true,
+              }
+            : message
+        )
+      );
     } finally {
       setIsLoading(false);
     }
@@ -128,7 +150,7 @@ function FlowerAssistant({ onAddToCart, onOpenCatalog, requestAssistantReply = d
                 key={message.id}
                 className={`flower-assistant-message flower-assistant-message--${message.role} ${message.isError ? "is-error" : ""}`}
               >
-                <p>{message.text}</p>
+                <p>{message.text || (isLoading && message.role === "assistant" ? "Консультант думает..." : "")}</p>
 
                 {message.suggestions?.length ? (
                   <div className="flower-assistant-recommendations">
@@ -151,12 +173,6 @@ function FlowerAssistant({ onAddToCart, onOpenCatalog, requestAssistantReply = d
                 ) : null}
               </div>
             ))}
-
-            {isLoading ? (
-              <div className="flower-assistant-message flower-assistant-message--assistant flower-assistant-message--loading">
-                <p>Консультант думает...</p>
-              </div>
-            ) : null}
           </div>
 
           <div className="flower-assistant-quick-actions">
@@ -189,7 +205,7 @@ function FlowerAssistant({ onAddToCart, onOpenCatalog, requestAssistantReply = d
         onClick={() => setIsOpen((prev) => !prev)}
       >
         <span>AI</span>
-        <strong>Подбор букета</strong>
+        <strong>Ассистент</strong>
       </button>
     </div>
   );

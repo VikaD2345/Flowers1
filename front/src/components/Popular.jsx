@@ -16,7 +16,7 @@ const Popular = ({ products = [], onAddToCart, goToCatalog }) => {
             <div className="popular-cards">
                 {product.map((product, index) => (
                     <div key={index} className="popular-card">
-                        <img src={product.image} alt={product.title} className="popular-card-image" />
+                        <img src="./src/assets/1.jpg" alt={product.title} className="popular-card-image" />
                         <div className="popular_active">
                             <div className="popular_info">
                                 <h3 className="popular-card-title">{product.title}</h3>
