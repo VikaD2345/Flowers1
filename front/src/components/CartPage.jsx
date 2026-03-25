@@ -1,31 +1,46 @@
 import "./CartPage.css";
 
+const getItemsLabel = (count) => {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return "товар";
+  }
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return "товара";
+  }
+  return "товаров";
+};
+
 const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onCheckout }) => {
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const totalCount = items.reduce((sum, item) => sum + item.qty, 0);
 
   return (
-    <section className="cart-page" aria-label="РљРѕСЂР·РёРЅР°">
+    <section className="cart-page" aria-label="Корзина">
       <div className="cart-header-row">
-        <h1 className="cart-title">РљРѕСЂР·РёРЅР°</h1>
-        <p className="cart-subtitle">{totalCount} С‚РѕРІР°СЂ{totalCount === 1 ? "" : totalCount < 5 ? "Р°" : "РѕРІ"}</p>
+        <h1 className="cart-title">Корзина</h1>
+        <p className="cart-subtitle">
+          {totalCount} {getItemsLabel(totalCount)}
+        </p>
       </div>
 
       <div className="cart-layout">
         <div className="cart-items">
           {items.length === 0 ? (
-            <p className="cart-empty">РљРѕСЂР·РёРЅР° РїСѓСЃС‚Р°. Р”РѕР±Р°РІСЊС‚Рµ С‚РѕРІР°СЂС‹ РёР· РєР°С‚Р°Р»РѕРіР°.</p>
+            <p className="cart-empty">Корзина пуста. Добавьте товары из каталога.</p>
           ) : (
             items.map((item) => (
               <article className="cart-item" key={item.id}>
                 <img className="cart-item-image" src={item.image} alt={item.title} />
 
                 <div className="cart-item-info">
-                  <p className="cart-item-price">{item.price * item.qty} в‚Ѕ</p>
+                  <p className="cart-item-price">{item.price * item.qty} ₽</p>
                   <h2 className="cart-item-title">{item.title}</h2>
                   <p className="cart-item-description">{item.description}</p>
                   <p className="cart-item-note">
-                    РљРѕР»РёС‡РµСЃС‚РІРѕ: {item.qty}
+                    Количество: {item.qty}
                     {item.isPending ? " • обновляем..." : ""}
                   </p>
 
@@ -34,7 +49,7 @@ const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onChec
                       <button
                         type="button"
                         onClick={() => onDecrease(item)}
-                        aria-label="РЈРјРµРЅСЊС€РёС‚СЊ РєРѕР»РёС‡РµСЃС‚РІРѕ"
+                        aria-label="Уменьшить количество"
                         disabled={item.isPending}
                       >
                         -
@@ -43,7 +58,7 @@ const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onChec
                       <button
                         type="button"
                         onClick={() => onIncrease(item)}
-                        aria-label="РЈРІРµР»РёС‡РёС‚СЊ РєРѕР»РёС‡РµСЃС‚РІРѕ"
+                        aria-label="Увеличить количество"
                         disabled={item.isPending}
                       >
                         +
@@ -53,10 +68,10 @@ const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onChec
                       className="cart-remove"
                       type="button"
                       onClick={() => onRemove(item)}
-                      aria-label="РЈРґР°Р»РёС‚СЊ С‚РѕРІР°СЂ"
+                      aria-label="Удалить товар"
                       disabled={item.isPending}
                     >
-                      РЈРґР°Р»РёС‚СЊ
+                      Удалить
                     </button>
                   </div>
                 </div>
@@ -67,15 +82,17 @@ const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onChec
 
         <aside className="cart-sidebar">
           <button className="cart-continue" type="button" onClick={goToCatalog}>
-            РџСЂРѕРґРѕР»Р¶РёС‚СЊ РїРѕРєСѓРїРєРё
+            Продолжить покупки
           </button>
           <div className="cart-divider">
             <div className="cart-total">
-              <p>{totalCount} С‚РѕРІР°СЂ{totalCount === 1 ? "" : totalCount < 5 ? "Р°" : "РѕРІ"}</p>
-              <strong>{total} в‚Ѕ</strong>
+              <p>
+                {totalCount} {getItemsLabel(totalCount)}
+              </p>
+              <strong>{total} ₽</strong>
             </div>
             <button className="cart-pay" type="button" onClick={onCheckout} disabled={items.length === 0}>
-              РћС„РѕСЂРјРёС‚СЊ Р·Р°РєР°Р·
+              Оформить заказ
             </button>
           </div>
         </aside>
