@@ -14,68 +14,221 @@ import AuthPage from "./components/AuthPage";
 import AccountPage from "./components/AccountPage";
 import CheckoutPage from "./components/CheckoutPage";
 import FlowerAssistant from "./components/FlowerAssistant";
-import { getSessionUser, logoutLocalUser } from "./utils/authStorage";
-import { createOrder, getOrdersByUserId } from "./utils/orderStorage";
+import {
+  addCartItem,
+  createOrder,
+  fetchCart,
+  fetchCurrentUser,
+  fetchFlowers,
+  fetchOrders,
+  updateCartItem,
+  deleteCartItem,
+} from "./api/publicApi";
+import { getAccessToken, getSessionUser, logoutLocalUser, saveSession } from "./utils/authStorage";
+
+const PAYMENT_LABELS = {
+  card: "Банковская карта",
+  cash: "Наличными курьеру",
+  sbp: "СБП",
+};
 
 export default function PublicApp() {
   const [currentPage, setCurrentPage] = useState("home");
+  const [products, setProducts] = useState([]);
   const [cartItems, setCartItems] = useState([]);
   const [authUser, setAuthUser] = useState(null);
   const [orders, setOrders] = useState([]);
-  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [accessToken, setAccessToken] = useState(null);
+  const [catalogError, setCatalogError] = useState("");
+  const [isCatalogLoading, setIsCatalogLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
+  const [isAppReady, setIsAppReady] = useState(false);
 
   useEffect(() => {
-    const sessionUser = getSessionUser();
-    setAuthUser(sessionUser);
-    setOrders(sessionUser ? getOrdersByUserId(sessionUser.id) : []);
-    setIsAuthReady(true);
+    let isMounted = true;
+
+    fetchFlowers()
+      .then((items) => {
+        if (!isMounted) {
+          return;
+        }
+        setProducts(items);
+        setCatalogError("");
+      })
+      .catch((error) => {
+        if (!isMounted) {
+          return;
+        }
+        setCatalogError(error.message || "Не удалось загрузить каталог из базы данных.");
+      })
+      .finally(() => {
+        if (!isMounted) {
+          return;
+        }
+        setIsCatalogLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const addToCart = (product) => {
-    setCartItems((prev) => {
-      const existingItem = prev.find((item) => item.id === product.id);
-      if (existingItem) {
-        return prev.map((item) =>
-          item.id === product.id ? { ...item, qty: item.qty + 1 } : item
-        );
+  useEffect(() => {
+    let isMounted = true;
+
+    const bootstrapSession = async () => {
+      const storedUser = getSessionUser();
+      const storedToken = getAccessToken();
+
+      if (!storedUser || !storedToken) {
+        if (isMounted) {
+          setIsAppReady(true);
+        }
+        return;
       }
-      return [...prev, { ...product, qty: 1 }];
-    });
-    setCurrentPage("cart");
+
+      try {
+        const [user, cart, userOrders] = await Promise.all([
+          fetchCurrentUser(storedToken),
+          fetchCart(storedToken),
+          fetchOrders(storedToken),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        saveSession({ user, token: storedToken });
+        setAuthUser(user);
+        setAccessToken(storedToken);
+        setCartItems(cart);
+        setOrders(userOrders);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+        logoutLocalUser();
+        setAuthUser(null);
+        setAccessToken(null);
+        setCartItems([]);
+        setOrders([]);
+      } finally {
+        if (isMounted) {
+          setIsAppReady(true);
+        }
+      }
+    };
+
+    bootstrapSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleApiError = (error, fallbackMessage) => {
+    if (error?.status === 401) {
+      logoutLocalUser();
+      setAuthUser(null);
+      setAccessToken(null);
+      setCartItems([]);
+      setOrders([]);
+      setCurrentPage("auth");
+    }
+
+    setPageError(error?.message || fallbackMessage);
   };
 
   const goToCatalog = () => {
+    setPageError("");
     setCurrentPage("catalog");
   };
 
-  const increaseQty = (id) => {
-    setCartItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, qty: item.qty + 1 } : item))
-    );
+  const addToCart = async (product) => {
+    if (!authUser || !accessToken) {
+      setPageError("Чтобы добавить товар в корзину из базы данных, сначала войдите в аккаунт.");
+      setCurrentPage("auth");
+      return;
+    }
+
+    try {
+      const nextItem = await addCartItem(accessToken, product.productId ?? product.id, 1);
+      setCartItems((prev) => {
+        const existingItem = prev.find((item) => item.id === nextItem.id);
+        if (existingItem) {
+          return prev.map((item) => (item.id === nextItem.id ? nextItem : item));
+        }
+        return [...prev, nextItem];
+      });
+      setPageError("");
+      setCurrentPage("cart");
+    } catch (error) {
+      handleApiError(error, "Не удалось добавить товар в корзину.");
+    }
   };
 
-  const decreaseQty = (id) => {
-    setCartItems((prev) =>
-      prev
-        .map((item) => (item.id === id ? { ...item, qty: item.qty - 1 } : item))
-        .filter((item) => item.qty > 0)
-    );
+  const increaseQty = async (item) => {
+    try {
+      const updatedItem = await updateCartItem(accessToken, item.id, item.qty + 1);
+      setCartItems((prev) => prev.map((entry) => (entry.id === updatedItem.id ? updatedItem : entry)));
+      setPageError("");
+    } catch (error) {
+      handleApiError(error, "Не удалось увеличить количество товара.");
+    }
   };
 
-  const removeFromCart = (id) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== id));
+  const decreaseQty = async (item) => {
+    if (item.qty <= 1) {
+      await removeFromCart(item);
+      return;
+    }
+
+    try {
+      const updatedItem = await updateCartItem(accessToken, item.id, item.qty - 1);
+      setCartItems((prev) => prev.map((entry) => (entry.id === updatedItem.id ? updatedItem : entry)));
+      setPageError("");
+    } catch (error) {
+      handleApiError(error, "Не удалось уменьшить количество товара.");
+    }
   };
 
-  const handleAuthSuccess = (user) => {
-    setAuthUser(user);
-    setOrders(getOrdersByUserId(user.id));
-    setCurrentPage("account");
+  const removeFromCart = async (item) => {
+    try {
+      await deleteCartItem(accessToken, item.id);
+      setCartItems((prev) => prev.filter((entry) => entry.id !== item.id));
+      setPageError("");
+    } catch (error) {
+      handleApiError(error, "Не удалось удалить товар из корзины.");
+    }
+  };
+
+  const handleAuthSuccess = async (user) => {
+    const token = getAccessToken();
+    if (!token) {
+      setPageError("Сессия не была сохранена после входа.");
+      return;
+    }
+
+    try {
+      const [cart, userOrders] = await Promise.all([fetchCart(token), fetchOrders(token)]);
+      setAuthUser(user);
+      setAccessToken(token);
+      setCartItems(cart);
+      setOrders(userOrders);
+      setPageError("");
+      setCurrentPage("account");
+    } catch (error) {
+      handleApiError(error, "Не удалось загрузить данные пользователя.");
+    }
   };
 
   const handleLogout = () => {
     logoutLocalUser();
     setAuthUser(null);
+    setAccessToken(null);
+    setCartItems([]);
     setOrders([]);
+    setPageError("");
     setCurrentPage("home");
   };
 
@@ -88,7 +241,7 @@ export default function PublicApp() {
       return;
     }
 
-    if (!authUser) {
+    if (!authUser || !accessToken) {
       setCurrentPage("auth");
       return;
     }
@@ -96,27 +249,23 @@ export default function PublicApp() {
     setCurrentPage("checkout");
   };
 
-  const handleOrderSubmit = ({ address, paymentMethod }) => {
-    const paymentLabel =
-      paymentMethod === "card"
-        ? "Банковская карта"
-        : paymentMethod === "cash"
-          ? "Наличными курьеру"
-          : "СБП";
+  const handleOrderSubmit = async ({ address, paymentMethod }) => {
+    try {
+      const newOrder = await createOrder(accessToken, {
+        address,
+        paymentMethod: PAYMENT_LABELS[paymentMethod] ?? paymentMethod,
+      });
 
-    const newOrder = createOrder({
-      userId: authUser.id,
-      items: cartItems,
-      address,
-      paymentMethod: paymentLabel,
-    });
-
-    setOrders((prev) => [newOrder, ...prev]);
-    setCartItems([]);
-    setCurrentPage("account");
+      setOrders((prev) => [newOrder, ...prev]);
+      setCartItems([]);
+      setPageError("");
+      setCurrentPage("account");
+    } catch (error) {
+      handleApiError(error, "Не удалось оформить заказ.");
+    }
   };
 
-  if (!isAuthReady) {
+  if (!isAppReady) {
     return null;
   }
 
@@ -127,6 +276,7 @@ export default function PublicApp() {
           onBackHome={() => setCurrentPage("home")}
           onAuthSuccess={handleAuthSuccess}
         />
+        {pageError ? <p className="catalog-empty">{pageError}</p> : null}
         <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
       </>
     );
@@ -148,6 +298,7 @@ export default function PublicApp() {
           onOpenCatalog={goToCatalog}
           onLogout={handleLogout}
         />
+        {pageError ? <p className="catalog-empty">{pageError}</p> : null}
         <Footer />
         <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
       </div>
@@ -167,6 +318,7 @@ export default function PublicApp() {
           onBackToCart={() => setCurrentPage("cart")}
           onSubmitOrder={handleOrderSubmit}
         />
+        {pageError ? <p className="catalog-empty">{pageError}</p> : null}
         <Footer />
         <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
       </div>
@@ -181,11 +333,17 @@ export default function PublicApp() {
         onOpenProfile={handleProfileOpen}
       />
       {currentPage === "catalog" ? (
-        <CatalogPage onAddToCart={addToCart} />
+        <CatalogPage
+          products={products}
+          onAddToCart={addToCart}
+          isLoading={isCatalogLoading}
+          error={catalogError || pageError}
+        />
       ) : currentPage === "home" ? (
         <>
           <Main1 />
-          <Popular onAddToCart={addToCart} goToCatalog={goToCatalog} />
+          {pageError ? <p className="catalog-empty">{pageError}</p> : null}
+          <Popular products={products} onAddToCart={addToCart} goToCatalog={goToCatalog} />
           <Benefits />
           <FAQ />
           <Gallery />

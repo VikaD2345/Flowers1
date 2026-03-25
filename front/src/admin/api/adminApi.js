@@ -78,18 +78,26 @@ export async function adminListProducts() {
   return adminFetch("/flowers");
 }
 
-export async function adminCreateProduct({ name, price, image_url }) {
+export async function adminCreateProduct({ name, description, category, price, image_url }) {
   return adminFetch("/admin/flowers", {
     method: "POST",
-    body: { name, price: Number(price), image_url },
+    body: {
+      name,
+      description,
+      category,
+      price: Number(price),
+      image_url,
+    },
   });
 }
 
-export async function adminUpdateProduct(id, { name, price, image_url }) {
+export async function adminUpdateProduct(id, { name, description, category, price, image_url }) {
   return adminFetch(`/admin/flowers/${id}`, {
     method: "PATCH",
     body: {
       ...(name !== undefined ? { name } : {}),
+      ...(description !== undefined ? { description } : {}),
+      ...(category !== undefined ? { category } : {}),
       ...(price !== undefined ? { price: Number(price) } : {}),
       ...(image_url !== undefined ? { image_url } : {}),
     },
@@ -105,4 +113,3 @@ export async function adminListAudit({ limit = 100 } = {}) {
   params.set("limit", String(limit));
   return adminFetch(`/admin/audit?${params.toString()}`);
 }
-

@@ -11,6 +11,8 @@ function normalizeProduct(p) {
   return {
     id: p.id,
     name: p.name ?? "",
+    description: p.description ?? "",
+    category: p.category ?? "Другое",
     price: Number(p.price ?? 0),
     image_url: p.image_url ?? "",
   };
@@ -21,7 +23,13 @@ export function AdminProductsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [draft, setDraft] = useState({ name: "", price: "", image_url: "" });
+  const [draft, setDraft] = useState({
+    name: "",
+    description: "",
+    category: "",
+    price: "",
+    image_url: "",
+  });
   const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
@@ -51,13 +59,19 @@ export function AdminProductsPage() {
   }, [products]);
 
   const resetDraft = () => {
-    setDraft({ name: "", price: "", image_url: "" });
+    setDraft({ name: "", description: "", category: "", price: "", image_url: "" });
     setEditingId(null);
   };
 
   const startEdit = (p) => {
     setEditingId(p.id);
-    setDraft({ name: p.name, price: String(p.price), image_url: p.image_url });
+    setDraft({
+      name: p.name,
+      description: p.description,
+      category: p.category,
+      price: String(p.price),
+      image_url: p.image_url,
+    });
   };
 
   const onSubmit = async (e) => {
@@ -65,11 +79,13 @@ export function AdminProductsPage() {
     setError(null);
     const payload = {
       name: draft.name.trim(),
+      description: draft.description.trim(),
+      category: draft.category.trim(),
       price: Number(draft.price),
       image_url: draft.image_url.trim(),
     };
-    if (!payload.name || !Number.isFinite(payload.price) || !payload.image_url) {
-      setError("Please fill name, price and image URL.");
+    if (!payload.name || !payload.category || !Number.isFinite(payload.price) || !payload.image_url) {
+      setError("Please fill name, category, price and image URL.");
       return;
     }
 
@@ -141,6 +157,23 @@ export function AdminProductsPage() {
                 />
               </div>
               <div className="adminField">
+                <label htmlFor="p-category">Category</label>
+                <input
+                  id="p-category"
+                  value={draft.category}
+                  onChange={(e) => setDraft((d) => ({ ...d, category: e.target.value }))}
+                />
+              </div>
+              <div className="adminField">
+                <label htmlFor="p-description">Description</label>
+                <textarea
+                  id="p-description"
+                  value={draft.description}
+                  onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+                  rows={4}
+                />
+              </div>
+              <div className="adminField">
                 <label htmlFor="p-image">Image URL</label>
                 <input
                   id="p-image"
@@ -181,6 +214,9 @@ export function AdminProductsPage() {
                         <td>#{p.id}</td>
                         <td>
                           <div style={{ fontWeight: 700 }}>{p.name}</div>
+                          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
+                            {p.category}
+                          </div>
                           <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
                             {p.image_url}
                           </div>

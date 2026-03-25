@@ -29,18 +29,18 @@ const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onChec
 
                   <div className="cart-item-controls">
                     <div className="cart-qty-box">
-                      <button type="button" onClick={() => onDecrease(item.id)} aria-label="Уменьшить количество">
+                      <button type="button" onClick={() => onDecrease(item)} aria-label="Уменьшить количество">
                         -
                       </button>
                       <span>{item.qty}</span>
-                      <button type="button" onClick={() => onIncrease(item.id)} aria-label="Увеличить количество">
+                      <button type="button" onClick={() => onIncrease(item)} aria-label="Увеличить количество">
                         +
                       </button>
                     </div>
                     <button
                       className="cart-remove"
                       type="button"
-                      onClick={() => onRemove(item.id)}
+                      onClick={() => onRemove(item)}
                       aria-label="Удалить товар"
                     >
                       Удалить

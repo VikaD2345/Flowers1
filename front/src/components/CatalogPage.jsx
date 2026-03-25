@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import products from "../product.json";
 import BuyButton from "./buy_button";
 import "./CatalogPage.css";
 
 const PAGE_SIZE = 6;
 
-const CatalogPage = ({ onAddToCart }) => {
+const CatalogPage = ({ products, onAddToCart, isLoading, error }) => {
   const [activeCategory, setActiveCategory] = useState("Все");
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -15,7 +14,7 @@ const CatalogPage = ({ onAddToCart }) => {
   const categories = useMemo(() => {
     const values = new Set(products.map((item) => item.category));
     return ["Все", ...values];
-  }, []);
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((item) => {
@@ -23,7 +22,7 @@ const CatalogPage = ({ onAddToCart }) => {
       const searchMatch = item.title.toLowerCase().includes(query.toLowerCase());
       return categoryMatch && searchMatch;
     });
-  }, [activeCategory, query]);
+  }, [activeCategory, products, query]);
 
   const visibleProducts = filteredProducts.slice(0, visibleCount);
   const canShowMore = visibleCount < filteredProducts.length;
@@ -118,7 +117,9 @@ const CatalogPage = ({ onAddToCart }) => {
           ))}
         </div>
 
-        {visibleProducts.length === 0 ? (
+        {isLoading ? <p className="catalog-empty">Загружаем каталог</p> : null}
+        {error ? <p className="catalog-empty">{error}</p> : null}
+        {!isLoading && !error && visibleProducts.length === 0 ? (
           <p className="catalog-empty">Ничего не найдено по текущему фильтру.</p>
         ) : null}
 

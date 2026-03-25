@@ -51,6 +51,8 @@ class FlowerModel(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    category: Mapped[str] = mapped_column(String(255), nullable=False, default="Другое")
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     image_url: Mapped[str] = mapped_column(String(1024), nullable=False)
 
@@ -81,6 +83,8 @@ class OrderModel(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("app_users.id"), index=True, nullable=False)
     status: Mapped[OrderStatus] = mapped_column(SAEnum(OrderStatus), nullable=False)
+    delivery_address: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    payment_method: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow

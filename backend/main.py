@@ -3,6 +3,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from urllib import error as urllib_error
 from urllib import request as urllib_request
+from pathlib import Path
 
 from fastapi.encoders import jsonable_encoder
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -12,6 +13,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session, joinedload
 
 from database import Base, engine, get_db
@@ -57,12 +59,65 @@ OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "45"))
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
 
+DEFAULT_FLOWERS_FILE = Path(__file__).resolve().parent.parent / "front" / "src" / "product.json"
+
+
+def _ensure_schema() -> None:
+    if engine is None:
+        return
+
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        bouquet_columns = {column["name"] for column in inspector.get_columns("bouquets")}
+        if "description" not in bouquet_columns:
+            conn.execute(text("ALTER TABLE bouquets ADD COLUMN description TEXT NOT NULL DEFAULT ''"))
+        if "category" not in bouquet_columns:
+            conn.execute(
+                text("ALTER TABLE bouquets ADD COLUMN category VARCHAR(255) NOT NULL DEFAULT 'Другое'")
+            )
+
+        order_columns = {column["name"] for column in inspector.get_columns("app_orders")}
+        if "delivery_address" not in order_columns:
+            conn.execute(
+                text("ALTER TABLE app_orders ADD COLUMN delivery_address TEXT NOT NULL DEFAULT ''")
+            )
+        if "payment_method" not in order_columns:
+            conn.execute(
+                text("ALTER TABLE app_orders ADD COLUMN payment_method VARCHAR(255) NOT NULL DEFAULT ''")
+            )
+
+
+def _seed_flowers(db: Session) -> None:
+    if db.query(FlowerModel).first() is not None or not DEFAULT_FLOWERS_FILE.exists():
+        return
+
+    with DEFAULT_FLOWERS_FILE.open("r", encoding="utf-8") as file:
+        raw_items = json.load(file)
+
+    seen_names: set[str] = set()
+    for item in raw_items:
+        name = str(item.get("title", "")).strip()
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+        db.add(
+            FlowerModel(
+                name=name,
+                description=str(item.get("description", "")).strip(),
+                category=str(item.get("category", "Другое")).strip() or "Другое",
+                price=float(item.get("price", 0)),
+                image_url=str(item.get("image", "")).strip(),
+            )
+        )
+    db.commit()
+
 
 @app.on_event("startup")
 def on_startup() -> None:
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured")
     Base.metadata.create_all(bind=engine)
+    _ensure_schema()
 
     # Ensure at least one admin exists (dev-friendly bootstrap).
     from database import SessionLocal
@@ -85,6 +140,7 @@ def on_startup() -> None:
                 admin.password_hash = pwd_context.hash(BOOTSTRAP_ADMIN_PASSWORD)
             admin.role = UserRole.admin
         db.commit()
+        _seed_flowers(db)
     finally:
         db.close()
 
@@ -155,6 +211,8 @@ def _audit(
 
 class FlowerBase(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+    description: str = Field(default="", max_length=4000)
+    category: str = Field(default="Другое", min_length=1, max_length=255)
     price: float = Field(ge=0)
     image_url: str = Field(min_length=1, max_length=1024)
 
@@ -165,7 +223,9 @@ class FlowerCreate(FlowerBase):
 
 class FlowerUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
-    price: float | None = Field(default=None, gt=0)
+    description: str | None = Field(default=None, max_length=4000)
+    category: str | None = Field(default=None, min_length=1, max_length=255)
+    price: float | None = Field(default=None, ge=0)
     image_url: str | None = Field(default=None, min_length=1, max_length=1024)
 
 
@@ -222,6 +282,8 @@ class OrderItemOut(BaseModel):
 class OrderOut(BaseModel):
     id: int
     status: OrderStatus
+    delivery_address: str
+    payment_method: str
     created_at: datetime
     user_id: int | None = None
     user_username: str | None = None
@@ -230,6 +292,11 @@ class OrderOut(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: OrderStatus
+
+
+class OrderCreate(BaseModel):
+    address: str = Field(min_length=5, max_length=4000)
+    payment_method: str = Field(min_length=2, max_length=255)
 
 
 class AuditLogOut(BaseModel):
@@ -647,7 +714,17 @@ def me(current_user: UserModel = Depends(get_current_user)) -> UserOut:
 @app.get("/flowers", response_model=list[FlowerOut])
 def list_flowers(db: Session = Depends(get_db)) -> list[FlowerOut]:
     rows = db.query(FlowerModel).order_by(FlowerModel.id.asc()).all()
-    return [FlowerOut(id=r.id, name=r.name, price=float(r.price), image_url=r.image_url) for r in rows]
+    return [
+        FlowerOut(
+            id=r.id,
+            name=r.name,
+            description=r.description,
+            category=r.category,
+            price=float(r.price),
+            image_url=r.image_url,
+        )
+        for r in rows
+    ]
 
 
 @app.get("/flowers/{flower_id}", response_model=FlowerOut)
@@ -655,7 +732,14 @@ def get_flower(flower_id: int, db: Session = Depends(get_db)) -> FlowerOut:
     row = db.query(FlowerModel).filter(FlowerModel.id == flower_id).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Flower not found")
-    return FlowerOut(id=row.id, name=row.name, price=float(row.price), image_url=row.image_url)
+    return FlowerOut(
+        id=row.id,
+        name=row.name,
+        description=row.description,
+        category=row.category,
+        price=float(row.price),
+        image_url=row.image_url,
+    )
 
 
 @app.post("/admin/flowers", response_model=FlowerOut)
@@ -664,7 +748,13 @@ def admin_create_flower(
     db: Session = Depends(get_db),
     admin: UserModel = Depends(require_admin),
 ) -> FlowerOut:
-    row = FlowerModel(name=payload.name, price=payload.price, image_url=str(payload.image_url))
+    row = FlowerModel(
+        name=payload.name,
+        description=payload.description,
+        category=payload.category,
+        price=payload.price,
+        image_url=str(payload.image_url),
+    )
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -674,9 +764,23 @@ def admin_create_flower(
         action="create",
         entity="flower",
         entity_id=row.id,
-        after={"id": row.id, "name": row.name, "price": float(row.price), "image_url": row.image_url},
+        after={
+            "id": row.id,
+            "name": row.name,
+            "description": row.description,
+            "category": row.category,
+            "price": float(row.price),
+            "image_url": row.image_url,
+        },
     )
-    return FlowerOut(id=row.id, name=row.name, price=float(row.price), image_url=row.image_url)
+    return FlowerOut(
+        id=row.id,
+        name=row.name,
+        description=row.description,
+        category=row.category,
+        price=float(row.price),
+        image_url=row.image_url,
+    )
 
 
 @app.patch("/admin/flowers/{flower_id}", response_model=FlowerOut)
@@ -690,9 +794,20 @@ def admin_update_flower(
     if row is None:
         raise HTTPException(status_code=404, detail="Flower not found")
 
-    before = {"id": row.id, "name": row.name, "price": float(row.price), "image_url": row.image_url}
+    before = {
+        "id": row.id,
+        "name": row.name,
+        "description": row.description,
+        "category": row.category,
+        "price": float(row.price),
+        "image_url": row.image_url,
+    }
     if payload.name is not None:
         row.name = payload.name
+    if payload.description is not None:
+        row.description = payload.description
+    if payload.category is not None:
+        row.category = payload.category
     if payload.price is not None:
         row.price = payload.price
     if payload.image_url is not None:
@@ -700,7 +815,14 @@ def admin_update_flower(
 
     db.commit()
     db.refresh(row)
-    after = {"id": row.id, "name": row.name, "price": float(row.price), "image_url": row.image_url}
+    after = {
+        "id": row.id,
+        "name": row.name,
+        "description": row.description,
+        "category": row.category,
+        "price": float(row.price),
+        "image_url": row.image_url,
+    }
     _audit(
         db=db,
         actor=admin,
@@ -710,7 +832,14 @@ def admin_update_flower(
         before=before,
         after=after,
     )
-    return FlowerOut(id=row.id, name=row.name, price=float(row.price), image_url=row.image_url)
+    return FlowerOut(
+        id=row.id,
+        name=row.name,
+        description=row.description,
+        category=row.category,
+        price=float(row.price),
+        image_url=row.image_url,
+    )
 
 
 @app.delete("/admin/flowers/{flower_id}")
@@ -722,7 +851,14 @@ def admin_delete_flower(
     row = db.query(FlowerModel).filter(FlowerModel.id == flower_id).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Flower not found")
-    before = {"id": row.id, "name": row.name, "price": float(row.price), "image_url": row.image_url}
+    before = {
+        "id": row.id,
+        "name": row.name,
+        "description": row.description,
+        "category": row.category,
+        "price": float(row.price),
+        "image_url": row.image_url,
+    }
     db.delete(row)
     db.commit()
     _audit(
@@ -752,6 +888,8 @@ def get_cart(current_user: UserModel = Depends(get_current_user), db: Session = 
             flower=FlowerOut(
                 id=i.flower.id,
                 name=i.flower.name,
+                description=i.flower.description,
+                category=i.flower.category,
                 price=float(i.flower.price),
                 image_url=i.flower.image_url,
             ),
@@ -793,7 +931,14 @@ def add_to_cart(
     return CartItemOut(
         id=item.id,
         qty=item.qty,
-        flower=FlowerOut(id=item.flower.id, name=item.flower.name, price=float(item.flower.price), image_url=item.flower.image_url),
+        flower=FlowerOut(
+            id=item.flower.id,
+            name=item.flower.name,
+            description=item.flower.description,
+            category=item.flower.category,
+            price=float(item.flower.price),
+            image_url=item.flower.image_url,
+        ),
     )
 
 
@@ -819,7 +964,14 @@ def update_cart_item(
     return CartItemOut(
         id=item.id,
         qty=item.qty,
-        flower=FlowerOut(id=item.flower.id, name=item.flower.name, price=float(item.flower.price), image_url=item.flower.image_url),
+        flower=FlowerOut(
+            id=item.flower.id,
+            name=item.flower.name,
+            description=item.flower.description,
+            category=item.flower.category,
+            price=float(item.flower.price),
+            image_url=item.flower.image_url,
+        ),
     )
 
 
@@ -839,6 +991,7 @@ def delete_cart_item(
 
 @app.post("/orders/from-cart", response_model=OrderOut)
 def create_order_from_cart(
+    payload: OrderCreate,
     current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> OrderOut:
@@ -851,7 +1004,12 @@ def create_order_from_cart(
     if not cart_items:
         raise HTTPException(status_code=400, detail="Cart is empty")
 
-    order = OrderModel(user_id=current_user.id, status=OrderStatus.new)
+    order = OrderModel(
+        user_id=current_user.id,
+        status=OrderStatus.new,
+        delivery_address=payload.address.strip(),
+        payment_method=payload.payment_method.strip(),
+    )
     db.add(order)
     db.flush()  # assigns order.id
 
@@ -877,12 +1035,16 @@ def create_order_from_cart(
     return OrderOut(
         id=order.id,
         status=order.status,
+        delivery_address=order.delivery_address,
+        payment_method=order.payment_method,
         created_at=order.created_at,
         items=[
             OrderItemOut(
                 flower=FlowerOut(
                     id=it.flower.id,
                     name=it.flower.name,
+                    description=it.flower.description,
+                    category=it.flower.category,
                     price=float(it.flower.price),
                     image_url=it.flower.image_url,
                 ),
@@ -907,12 +1069,16 @@ def my_orders(current_user: UserModel = Depends(get_current_user), db: Session =
         OrderOut(
             id=o.id,
             status=o.status,
+            delivery_address=o.delivery_address,
+            payment_method=o.payment_method,
             created_at=o.created_at,
             items=[
                 OrderItemOut(
                     flower=FlowerOut(
                         id=it.flower.id,
                         name=it.flower.name,
+                        description=it.flower.description,
+                        category=it.flower.category,
                         price=float(it.flower.price),
                         image_url=it.flower.image_url,
                     ),
@@ -942,12 +1108,16 @@ def get_order(order_id: int, current_user: UserModel = Depends(get_current_user)
     return OrderOut(
         id=order.id,
         status=order.status,
+        delivery_address=order.delivery_address,
+        payment_method=order.payment_method,
         created_at=order.created_at,
         items=[
             OrderItemOut(
                 flower=FlowerOut(
                     id=it.flower.id,
                     name=it.flower.name,
+                    description=it.flower.description,
+                    category=it.flower.category,
                     price=float(it.flower.price),
                     image_url=it.flower.image_url,
                 ),
@@ -974,6 +1144,8 @@ def admin_list_orders(_: UserModel = Depends(require_admin), db: Session = Depen
         OrderOut(
             id=o.id,
             status=o.status,
+            delivery_address=o.delivery_address,
+            payment_method=o.payment_method,
             created_at=o.created_at,
             user_id=o.user_id,
             user_username=o.user.username if o.user else None,
@@ -982,6 +1154,8 @@ def admin_list_orders(_: UserModel = Depends(require_admin), db: Session = Depen
                     flower=FlowerOut(
                         id=it.flower.id,
                         name=it.flower.name,
+                        description=it.flower.description,
+                        category=it.flower.category,
                         price=float(it.flower.price),
                         image_url=it.flower.image_url,
                     ),
@@ -1031,6 +1205,8 @@ def admin_update_order_status(
     return OrderOut(
         id=order.id,
         status=order.status,
+        delivery_address=order.delivery_address,
+        payment_method=order.payment_method,
         created_at=order.created_at,
         user_id=order.user_id,
         user_username=order.user.username if order.user else None,
@@ -1039,6 +1215,8 @@ def admin_update_order_status(
                 flower=FlowerOut(
                     id=it.flower.id,
                     name=it.flower.name,
+                    description=it.flower.description,
+                    category=it.flower.category,
                     price=float(it.flower.price),
                     image_url=it.flower.image_url,
                 ),

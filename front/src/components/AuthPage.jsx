@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { loginLocalUser, registerLocalUser } from "../utils/authStorage";
+import { fetchCurrentUser, loginUser, registerUser } from "../api/publicApi";
+import { saveSession } from "../utils/authStorage";
 import "./AuthPage.css";
 
 const initialSubmitState = {
@@ -59,7 +60,10 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
     });
 
     try {
-      const user = registerLocalUser(registerForm);
+      await registerUser(registerForm);
+      const loginPayload = await loginUser(registerForm);
+      const user = await fetchCurrentUser(loginPayload.access_token);
+      saveSession({ user, token: loginPayload.access_token });
       setRegisterForm({
         username: "",
         password: "",
@@ -99,7 +103,9 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
     });
 
     try {
-      const user = loginLocalUser(loginForm);
+      const loginPayload = await loginUser(loginForm);
+      const user = await fetchCurrentUser(loginPayload.access_token);
+      saveSession({ user, token: loginPayload.access_token });
 
       setLoginState({
         isLoading: false,

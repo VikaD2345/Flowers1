@@ -1,10 +1,9 @@
 import BuyButton from "./buy_button";
-import popularData from "../popular.json";
 import "./Popular.css";
 
 
-const Popular = ({ onAddToCart, goToCatalog }) => {
-    const product = popularData;
+const Popular = ({ products = [], onAddToCart, goToCatalog }) => {
+    const product = products.slice(0, 6);
 
     if (product.length === 0) {
         return <div>No products found.</div>;
