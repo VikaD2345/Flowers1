@@ -90,7 +90,7 @@ const RegisterPage = ({ onOpenLogin }) => {
           <h1 className="register-title">РЕГИСТРАЦИЯ</h1>
 
           <form className="register-form" onSubmit={handleSubmit}>
-            <input
+            <input 
               type="text"
               name="username"
               placeholder="Имя"
