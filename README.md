@@ -115,6 +115,113 @@ Behavior:
 - searches real products in the database
 - returns a reply based only on backend data
 
+## Forecast
+
+В backend добавлен модуль прогнозирования сезонного спроса на основе `Prophet`.
+
+### What Prophet does
+
+`Prophet` анализирует историю ежедневных заказов, находит сезонности и строит прогноз будущего спроса.
+
+В этом проекте модуль:
+- загружает историю заказов из `synthetic_orders.csv`
+- агрегирует данные по дням
+- учитывает недельную и годовую сезонность
+- прогнозирует дневной спрос на будущие даты
+- рассчитывает план закупок с запасом
+
+План закупок считается по формуле:
+- `purchase_plan = forecast * (1 + safety_stock)`
+
+По умолчанию запас составляет `15%`.
+
+### Data source
+
+Синтетическая история заказов хранится в:
+- `d:\flowers-app\synthetic_orders.csv`
+
+Обязательные колонки:
+- `order_id`
+- `order_date`
+- `quantity`
+- `category`
+- `status`
+
+### Train model
+
+```powershell
+cd d:\flowers-app\backend
+.\venv\Scripts\python.exe train_prophet.py
+```
+
+Ожидаемый результат:
+- модель сохраняется в `backend\prophet_model.joblib`
+
+### Run backend locally
+
+```powershell
+cd d:\flowers-app\backend
+.\venv\Scripts\uvicorn.exe main:app --reload
+```
+
+Swagger:
+- `http://127.0.0.1:8100/docs`
+
+### Endpoints
+
+#### Health
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8100/forecast/health
+```
+
+Ожидаемый ответ:
+
+```json
+{
+  "model_loaded": true
+}
+```
+
+#### Forecast
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8100/forecast?days=5&safety_stock=0.15"
+```
+
+Пример ответа:
+
+```json
+[
+  {
+    "date": "2026-01-01",
+    "forecast": 16,
+    "purchase_plan": 18
+  }
+]
+```
+
+Параметры:
+- `days` - количество дней прогноза, по умолчанию `30`
+- `safety_stock` - коэффициент страхового запаса, по умолчанию `0.15`
+
+#### Retrain
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8100/forecast/retrain
+```
+
+Этот endpoint переобучает модель по данным из `synthetic_orders.csv` и перезаписывает `backend\prophet_model.joblib`.
+
+### Docker
+
+Если backend запускается через Docker, после изменений backend нужно пересобрать контейнер `app`:
+
+```powershell
+cd d:\flowers-app
+docker compose up -d --build app
+```
+
 ## Notes
 
 - `/assistant/health` checks Ollama only.
