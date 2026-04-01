@@ -66,9 +66,7 @@
   gap: 16px;
   padding: 18px 18px 14px;
   border-bottom: 1px solid rgba(117, 88, 79, 0.12);
-  background:
-    radial-gradient(circle at top left, rgba(171, 119, 98, 0.2), transparent 44%),
-    linear-gradient(135deg, #fff8f1, #fffdfb);
+  background: #fff
 }
 
 .flower-assistant-eyebrow {
@@ -87,15 +85,15 @@
 }
 
 .flower-assistant-close {
-  width: 36px;
-  height: 36px;
+  width: 26px;
+  height: 26px;
+  padding: 7px;
   border: none;
-  border-radius: 50%;
+  border-radius: 30%;
   background: rgba(95, 59, 50, 0.08);
   color: #5f3b32;
   font-size: 28px;
   line-height: 1;
-  transform: rotate(45deg);
 }
 
 .flower-assistant-messages {
@@ -104,9 +102,7 @@
   gap: 12px;
   padding: 18px;
   overflow-y: auto;
-  background:
-    radial-gradient(circle at right top, rgba(240, 220, 211, 0.42), transparent 34%),
-    linear-gradient(180deg, #fffdfb, #fff7f2);
+  background: #fff
 }
 
 .flower-assistant-message {
@@ -229,7 +225,7 @@
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
-  padding: 0 18px 18px;
+  padding: 18px;
 }
 
 .flower-assistant-form input {

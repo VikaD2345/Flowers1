@@ -23,7 +23,7 @@ const Popular = ({ products = [], onAddToCart, goToCatalog }) => {
                                 <p className="popular-card-description">{product.description}</p>
                                 <p className="popular-card-price">{product.price} ₽</p>
                             </div>
-                            <BuyButton onClick={() => onAddToCart(product)} />
+                            <BuyButton onClick={() => onAddToCart(product)}/>
                         </div>
                     </div>
                 ))}

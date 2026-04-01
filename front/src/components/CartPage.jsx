@@ -32,7 +32,7 @@ const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onChec
           ) : (
             items.map((item) => (
               <article className="cart-item" key={item.id}>
-                <img className="cart-item-image" src={item.image} alt={item.title} />
+                <img className="cart-item-image" src= "./src/assets/1.jpg" alt={item.title} />
 
                 <div className="cart-item-info">
                   <p className="cart-item-price">{item.price * item.qty} ₽</p>

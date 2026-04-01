@@ -10,6 +10,9 @@
 }
 
 .checkout-page__inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: min(100%, 1180px);
   margin: 0 auto;
 }
