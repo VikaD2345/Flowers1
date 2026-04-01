@@ -117,16 +117,16 @@ Behavior:
 
 ## Forecast
 
-В backend добавлен модуль прогнозирования сезонного спроса на основе `Prophet`.
+В backend добавлен модуль прогнозирования сезонного спроса на основе `XGBoost`.
 
-### What Prophet does
+### What XGBoost does
 
-`Prophet` анализирует историю ежедневных заказов, находит сезонности и строит прогноз будущего спроса.
+`XGBoost` анализирует историю ежедневных заказов, учитывает календарные признаки и строит прогноз будущего спроса.
 
 В этом проекте модуль:
 - загружает историю заказов из `synthetic_orders.csv`
 - агрегирует данные по дням
-- учитывает недельную и годовую сезонность
+- учитывает календарные сезонности и пиковые даты
 - прогнозирует дневной спрос, начиная с текущей даты
 - рассчитывает план закупок с запасом
 
@@ -151,11 +151,11 @@ Behavior:
 
 ```powershell
 cd d:\flowers-app\backend
-.\venv\Scripts\python.exe train_prophet.py
+.\venv\Scripts\python.exe train_xgboost.py
 ```
 
 Ожидаемый результат:
-- модель сохраняется в `backend\prophet_model.joblib`
+- модель сохраняется в `backend\xgboost_model.joblib`
 
 ### Run backend locally
 
@@ -211,7 +211,7 @@ Invoke-RestMethod "http://127.0.0.1:8100/forecast?days=5&safety_stock=0.15"
 Invoke-RestMethod -Method Post http://127.0.0.1:8100/forecast/retrain
 ```
 
-Этот endpoint переобучает модель по данным из `synthetic_orders.csv` и перезаписывает `backend\prophet_model.joblib`.
+Этот endpoint переобучает модель по данным из `synthetic_orders.csv` и перезаписывает `backend\xgboost_model.joblib`.
 
 ### Docker
 

@@ -40,7 +40,7 @@ OPENAPI_TAGS = [
     {"name": "admin", "description": "Административные операции."},
     {"name": "guest", "description": "Публичные и служебные endpoints без авторизации."},
     {"name": "ollama", "description": "Endpoints, связанные с ассистентом и Ollama."},
-    {"name": "forecast", "description": "Прогнозирование спроса и переобучение модели Prophet."},
+    {"name": "forecast", "description": "Прогнозирование спроса и переобучение модели XGBoost."},
 ]
 
 
