@@ -27,9 +27,8 @@ import {
 import { getAccessToken, getSessionUser, logoutLocalUser, saveSession } from "./utils/authStorage";
 
 const PAYMENT_LABELS = {
-  card: "Банковская карта",
+  card: "Картой курьеру",
   cash: "Наличными курьеру",
-  sbp: "СБП",
 };
 
 export default function PublicApp() {
@@ -160,7 +159,7 @@ export default function PublicApp() {
     if (!authUser || !accessToken) {
       setPageError("Чтобы добавить товар в корзину, сначала войдите в аккаунт.");
       setCurrentPage("auth");
-      return;
+      return false;
     }
 
     const productId = product.productId ?? product.id;
@@ -176,7 +175,6 @@ export default function PublicApp() {
       return [...prev, buildOptimisticCartItem(product, 1)];
     });
     setPageError("");
-    setCurrentPage("cart");
 
     try {
       const nextItem = await addCartItem(accessToken, productId, 1);
@@ -201,9 +199,11 @@ export default function PublicApp() {
 
         return result;
       });
+      return true;
     } catch (error) {
       setCartItems(previousCartItems);
       handleApiError(error, "Не удалось добавить товар в корзину.");
+      return false;
     }
   };
 
@@ -316,7 +316,6 @@ export default function PublicApp() {
           onBackHome={() => setCurrentPage("home")}
           onAuthSuccess={handleAuthSuccess}
         />
-        {pageError ? <p className="catalog-empty">{pageError}</p> : null}
         <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
       </>
     );
@@ -338,7 +337,6 @@ export default function PublicApp() {
           onOpenCatalog={goToCatalog}
           onLogout={handleLogout}
         />
-        {pageError ? <p className="catalog-empty">{pageError}</p> : null}
         <Footer />
         <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
       </div>
@@ -358,7 +356,6 @@ export default function PublicApp() {
           onBackToCart={() => setCurrentPage("cart")}
           onSubmitOrder={handleOrderSubmit}
         />
-        {pageError ? <p className="catalog-empty">{pageError}</p> : null}
         <Footer />
         <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
       </div>
@@ -382,7 +379,6 @@ export default function PublicApp() {
       ) : currentPage === "home" ? (
         <>
           <Main1 />
-          {pageError ? <p className="catalog-empty">{pageError}</p> : null}
           <Popular products={products} onAddToCart={addToCart} goToCatalog={goToCatalog} />
           <Benefits />
           <FAQ />

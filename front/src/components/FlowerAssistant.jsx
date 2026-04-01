@@ -140,7 +140,7 @@ function FlowerAssistant({ onAddToCart, onOpenCatalog }) {
               aria-label="Свернуть чат"
               onClick={() => setIsOpen(false)}
             >
-              +
+              <img src="./src/assets/close-1511-svgrepo-com.svg" alt="close" />
             </button>
           </div>
 
@@ -172,14 +172,6 @@ function FlowerAssistant({ onAddToCart, onOpenCatalog }) {
                   </div>
                 ) : null}
               </div>
-            ))}
-          </div>
-
-          <div className="flower-assistant-quick-actions">
-            {QUICK_PROMPTS.map((prompt) => (
-              <button key={prompt} type="button" disabled={isLoading} onClick={() => submitMessage(prompt)}>
-                {prompt}
-              </button>
             ))}
           </div>
 

@@ -18,9 +18,20 @@
   white-space: nowrap;
 }
 
+.popular-card-button.is-added {
+  background-color: #ffffff;
+  color: #fa7b98;
+  border: 1px solid #f1d7df;
+}
+
 .popular-card-button:hover {
   background-color: #544b4b;
   transform: scale(1.05);
+}
+
+.popular-card-button.is-added:hover {
+  background-color: #f7ede6;
+  transform: none;
 }
 
 @media (max-width: 1024px) {

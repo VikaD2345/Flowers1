@@ -2,9 +2,8 @@ import { useState } from "react";
 import "./CheckoutPage.css";
 
 const paymentOptions = [
-  { id: "card", label: "Банковская карта" },
+  { id: "card", label: "Картой курьеру" },
   { id: "cash", label: "Наличными курьеру" },
-  { id: "sbp", label: "СБП" },
 ];
 
 function CheckoutPage({ items, onBackToCart, onSubmitOrder }) {

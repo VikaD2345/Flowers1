@@ -72,10 +72,6 @@ function AccountPage({ user, cartItems, orders, onBackHome, onOpenCatalog, onLog
             </article>
           </div>
 
-          <p className="account-note">
-            Аккаунт активен. Данные профиля подтягиваются с сервера, а вход сохраняется между перезагрузками.
-          </p>
-
           <div className="account-actions">
             <button type="button" className="register-submit account-primary-action" onClick={onOpenCatalog}>
               Перейти в каталог

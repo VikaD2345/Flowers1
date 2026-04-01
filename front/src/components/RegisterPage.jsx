@@ -114,14 +114,9 @@ const RegisterPage = ({ onOpenLogin }) => {
               {submitState.isLoading ? "Отправка..." : "Зарегистрироваться"}
             </button>
           </form>
-
-          <button type="button" className="register-login-link" onClick={onOpenLogin}>
-            Уже есть аккаунт? Войти
-          </button>
         </div>
       </div>
     </section>
   );
 };
-
 export default RegisterPage;
