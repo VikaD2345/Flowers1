@@ -907,7 +907,7 @@ def assistant_chat_stream(payload: AssistantChatRequest, db: Session = Depends(g
         )
 
         if criteria.get("needs_budget"):
-            reply = criteria.get("clarification_question") or "РџРѕРґСЃРєР°Р¶РёС‚Рµ, РїРѕР¶Р°Р»СѓР№СЃС‚Р°, РІ РєР°РєРѕРј Р±СЋРґР¶РµС‚Рµ РїРѕРґРѕР±СЂР°С‚СЊ РІР°СЂРёР°РЅС‚С‹?"
+            reply = criteria.get("clarification_question")
             yield _sse_event(
                 {
                     "type": "done",

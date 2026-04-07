@@ -60,7 +60,7 @@ docker exec -it flowers_ollama ollama list
 
 ### Quick model test
 ```powershell
-docker exec -it flowers_ollama ollama run llama3 "Answer with one word: ok"
+docker exec -it flowers_ollama ollama run llama3.2 "Answer with one word: ok"
 ```
 
 ## Assistant
