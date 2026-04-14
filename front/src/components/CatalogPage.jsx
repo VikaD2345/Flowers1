@@ -104,7 +104,7 @@ const CatalogPage = ({ products, onAddToCart, isLoading, error }) => {
         <div className="catalog-grid">
           {visibleProducts.map((product) => (
             <article key={product.id} className="catalog-card">
-              <img className="catalog-card-image" src="./src/assets/1.jpg" alt={product.title} />
+              <img className="catalog-card-image" src={product.image} alt={product.title} />
               <div className="catalog-card-footer">
                 <div className="catalog-card-meta">
                   <h3 className="catalog-card-title">{product.title}</h3>

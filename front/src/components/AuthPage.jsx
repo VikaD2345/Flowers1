@@ -186,10 +186,6 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
                     {registerState.isLoading ? "Отправка..." : "Зарегистрироваться"}
                   </button>
                 </form>
-
-                <button type="button" className="register-login-link" onClick={() => switchMode("login")}>
-                  Уже есть аккаунт? Войти
-                </button>
               </section>
 
               <section className="auth-panel" aria-hidden={mode !== "login"}>
@@ -223,9 +219,6 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
                   </button>
                 </form>
 
-                <button type="button" className="register-login-link" onClick={() => switchMode("register")}>
-                  Нет аккаунта? Зарегистрироваться
-                </button>
               </section>
             </div>
           </div>

@@ -88,7 +88,6 @@ function AccountPage({ user, cartItems, orders, onBackHome, onOpenCatalog, onLog
             <div className="account-orders">
               <div className="account-orders-head">
                 <h2 className="checkout-section-title">Мои заказы</h2>
-                <p className="account-note">Здесь показываются все оформленные заказы текущего пользователя.</p>
               </div>
 
               {orders.length === 0 ? (
@@ -121,7 +120,7 @@ function AccountPage({ user, cartItems, orders, onBackHome, onOpenCatalog, onLog
                       <div className="account-order-items">
                         {order.items.map((item) => (
                           <div className="account-order-item" key={`${order.id}-${item.id}`}>
-                            <img src={item.image} alt={item.title} className="account-order-item-image" />
+                            <img src=" ./src/assets/1.jpg" alt={item.title} className="account-order-item-image" />
                             <div>
                               <h3>{item.title}</h3>
                               <p>{item.qty} шт. x {item.price} ₽</p>

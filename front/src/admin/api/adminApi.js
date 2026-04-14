@@ -66,6 +66,10 @@ export async function adminUpdateOrderStatus(orderId, status) {
   });
 }
 
+export async function adminDeleteOrder(orderId) {
+  return adminFetch(`/admin/orders/${orderId}`, { method: "DELETE" });
+}
+
 export async function adminListUsers() {
   return adminFetch("/admin/users");
 }

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import "../admin.css";
-import { adminListOrders, adminUpdateOrderStatus } from "../api/adminApi";
+import { adminDeleteOrder, adminListOrders, adminUpdateOrderStatus } from "../api/adminApi";
 
 const statusMeta = {
   new: { label: "СОЗДАН", badge: "adminBadgeWarn" },
+  sobiraetsa: { label: "CОБИРАЕТСЯ", badge: "" },
   delivering: { label: "ДОСТАВЛЯЕТСЯ", badge: "" },
   done: { label: "ЗАВЕРШЕН", badge: "adminBadgeOk" },
   canceled: { label: "ОТМЕНЕН", badge: "adminBadgeDanger" },
@@ -56,6 +57,19 @@ export function AdminOrdersPage() {
     }
   };
 
+  const onDeleteOrder = async (order) => {
+    const ok = window.confirm(`Delete order #${order.id}?`);
+    if (!ok) return;
+
+    setError(null);
+    try {
+      await adminDeleteOrder(order.id);
+      setOrders((prev) => prev.filter((item) => item.id !== order.id));
+    } catch (err) {
+      setError(err?.message ?? "Failed to delete order.");
+    }
+  };
+
   return (
     <div className="adminGrid">
       <div className="adminCard adminCol12">
@@ -77,6 +91,7 @@ export function AdminOrdersPage() {
               >
                 <option value="all">All</option>
                 <option value="new">СОЗДАН</option>
+                <option value="sobiraetsa">СОБИРАЕТСЯ</option>
                 <option value="delivering">ДОСТАВЛЯЕТСЯ</option>
                 <option value="done">ЗАВЕРШЕН</option>
                 <option value="canceled">ОТМЕНЕН</option>
@@ -150,10 +165,14 @@ export function AdminOrdersPage() {
                             onChange={(e) => onChangeStatus(o.id, e.target.value)}
                           >
                             <option value="new">СОЗДАН</option>
+                            <option value="sobiraetsa">СОБИРАЕТСЯ</option>
                             <option value="delivering">ДОСТАВЛЯЕТСЯ</option>
                             <option value="done">ЗАВЕРШЕН</option>
                             <option value="canceled">ОТМЕНЕН</option>
                           </select>
+                          <button type="button" className="adminBtn" onClick={() => onDeleteOrder(o)}>
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>

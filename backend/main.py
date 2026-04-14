@@ -1161,6 +1161,19 @@ def admin_delete_flower(
     row = db.query(FlowerModel).filter(FlowerModel.id == flower_id).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Flower not found")
+
+    has_orders = (
+        db.query(OrderItemModel.id)
+        .filter(OrderItemModel.flower_id == flower_id)
+        .first()
+        is not None
+    )
+    if has_orders:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete flower that is already used in orders",
+        )
+
     before = {
         "id": row.id,
         "name": row.name,
@@ -1169,6 +1182,8 @@ def admin_delete_flower(
         "price": float(row.price),
         "image_url": row.image_url,
     }
+
+    db.query(CartItemModel).filter(CartItemModel.flower_id == flower_id).delete(synchronize_session=False)
     db.delete(row)
     db.commit()
     _audit(
@@ -1536,6 +1551,54 @@ def admin_update_order_status(
             for it in order.items
         ],
     )
+
+
+@app.delete("/admin/orders/{order_id}", tags=["admin"])
+def admin_delete_order(
+    order_id: int,
+    admin: UserModel = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    order = (
+        db.query(OrderModel)
+        .options(
+            joinedload(OrderModel.user),
+            joinedload(OrderModel.items).joinedload(OrderItemModel.flower),
+        )
+        .filter(OrderModel.id == order_id)
+        .one_or_none()
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    before = {
+        "id": order.id,
+        "status": order.status.value,
+        "delivery_address": order.delivery_address,
+        "payment_method": order.payment_method,
+        "user_id": order.user_id,
+        "items": [
+            {
+                "flower_id": it.flower.id if it.flower else None,
+                "flower_name": it.flower.name if it.flower else None,
+                "qty": it.qty,
+                "unit_price": float(it.unit_price),
+            }
+            for it in order.items
+        ],
+    }
+
+    db.delete(order)
+    db.commit()
+    _audit(
+        db=db,
+        actor=admin,
+        action="delete",
+        entity="order",
+        entity_id=order_id,
+        before=before,
+    )
+    return {"deleted": True}
 
 
 @app.get("/admin/users", response_model=list[AdminUserOut], tags=["admin"])
