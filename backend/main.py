@@ -627,6 +627,7 @@ def _reply_looks_unreliable(reply: str, *, budget_max: float | None) -> bool:
 
 def _extract_criteria_fallback(messages: list[AssistantMessageIn]) -> dict:
     conversation = " ".join(message.content for message in messages)
+    last_user_text = _last_user_message(messages)
     lowered = _normalize_text(conversation)
     intents = _detect_intents(messages)
 
@@ -642,7 +643,7 @@ def _extract_criteria_fallback(messages: list[AssistantMessageIn]) -> dict:
             recipient = candidate
             break
 
-    budget_text, budget_min, budget_max = _extract_budget_range(conversation)
+    budget_text, budget_min, budget_max = _extract_budget_range(last_user_text or conversation)
     needs_budget = budget_max is None and budget_min is None and budget_text is None and not any(intents.values())
 
     return {
@@ -658,7 +659,7 @@ def _extract_criteria_fallback(messages: list[AssistantMessageIn]) -> dict:
             if needs_budget
             else None
         ),
-        "search_summary": conversation.strip(),
+        "search_summary": (last_user_text or conversation).strip(),
     }
 
 
@@ -1216,7 +1217,10 @@ def search_products(
         if (budget_min is None or float(item[1].price) >= budget_min)
         and (budget_max is None or float(item[1].price) <= budget_max)
     ]
-    ranked = within_budget or candidates
+    has_hard_budget = budget_min is not None or budget_max is not None
+    ranked = within_budget if has_hard_budget else (within_budget or candidates)
+    if has_hard_budget and not ranked:
+        return []
     ranked.sort(key=lambda item: (-item[0], float(item[1].price), item[1].id))
     selected_rows = _choose_diverse_products(ranked, limit=limit, compare_mode=compare_mode)
 
