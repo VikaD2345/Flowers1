@@ -45,8 +45,8 @@
 }
 
 .flower-assistant-panel {
-  width: min(380px, calc(100vw - 24px));
-  max-height: min(640px, calc(100vh - 110px));
+  width: min(450px, calc(100vw - 24px));
+  max-height: min(500px, calc(100vh - 110px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
