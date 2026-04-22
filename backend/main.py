@@ -344,6 +344,7 @@ class AssistantCriteriaOut(BaseModel):
     style: str | None = None
     recipient: str | None = None
     budget_text: str | None = None
+    budget_min: float | None = None
     budget_max: float | None = None
 
 
@@ -440,6 +441,46 @@ def _extract_budget_candidates(text: str) -> list[float]:
 
     return matches
 
+def _budget_range_from_text(text: str) -> tuple[str | None, float | None, float | None]:
+    lowered = _normalize_text(text)
+    range_match = re.search(
+        r"(?:от|с)\s*(\d[\d\s]{1,8})(?:\s*(руб|р|₽|тыс|тысяч[аи]?|k))?\s*(?:до|-|–|—)\s*(\d[\d\s]{1,8})(?:\s*(руб|р|₽|тыс|тысяч[аи]?|k))?",
+        lowered,
+    )
+    if range_match:
+        min_raw, min_unit, max_raw, max_unit = range_match.groups()
+
+        def _to_number(raw: str, unit: str | None) -> float | None:
+            try:
+                value = float(raw.replace(" ", ""))
+            except ValueError:
+                return None
+            if unit in {"тыс", "тысяча", "тысячи", "тысяч", "k"}:
+                value *= 1000
+            if 300 <= value <= 300000:
+                return value
+            return None
+
+        budget_min = _to_number(min_raw, min_unit)
+        budget_max = _to_number(max_raw, max_unit)
+        if budget_min is not None and budget_max is not None:
+            if budget_min > budget_max:
+                budget_min, budget_max = budget_max, budget_min
+            return "range", budget_min, budget_max
+
+    lowered = _normalize_text(text)
+    numeric_values = _extract_budget_candidates(text)
+    if numeric_values:
+        return "numeric", None, max(numeric_values)
+    if any(token in lowered for token in ["РЅРµРґРѕСЂРѕРі", "РґРµС€РµРІ", "Р±СЋРґР¶РµС‚", "СЌРєРѕРЅРѕРј"]):
+        return "budget", None, 3500.0
+    if any(token in lowered for token in ["СЃСЂРµРґРЅ", "РѕРїС‚РёРјР°Р»"]):
+        return "mid", None, 6000.0
+    if any(token in lowered for token in ["РїСЂРµРјРёСѓРј", "РґРѕСЂРѕРі", "СЂРѕСЃРєРѕС€", "Р»СЋРєСЃ"]):
+        return "premium", None, 12000.0
+    return None, None, None
+
+
 def _budget_from_text(text: str) -> tuple[str | None, float | None]:
     lowered = _normalize_text(text)
     numeric_values = _extract_budget_candidates(text)
@@ -466,6 +507,69 @@ def _detect_intents(messages: list[AssistantMessageIn]) -> dict[str, bool]:
         "brighter": has_any(["ярче", "поярче", "более ярк", "насыщенн"]),
         "alternative": has_any(["ещё", "еще", "другой", "другие", "альтернати", "вариант"]),
     }
+
+
+def _extract_budget_range(text: str) -> tuple[str | None, float | None, float | None]:
+    lowered = _normalize_text(text)
+    range_match = re.search(
+        r"(?:от|с)\s*(\d[\d\s]{1,8})(?:\s*(руб|р|₽|тыс|тысяч[аи]?|k))?\s*(?:до|-|–|—)\s*(\d[\d\s]{1,8})(?:\s*(руб|р|₽|тыс|тысяч[аи]?|k))?",
+        lowered,
+    )
+    if range_match:
+        min_raw, min_unit, max_raw, max_unit = range_match.groups()
+
+        def _to_number(raw: str, unit: str | None) -> float | None:
+            try:
+                value = float(raw.replace(" ", ""))
+            except ValueError:
+                return None
+            if unit in {"тыс", "тысяча", "тысячи", "тысяч", "k"}:
+                value *= 1000
+            if 300 <= value <= 300000:
+                return value
+            return None
+
+        budget_min = _to_number(min_raw, min_unit)
+        budget_max = _to_number(max_raw, max_unit)
+        if budget_min is not None and budget_max is not None:
+            if budget_min > budget_max:
+                budget_min, budget_max = budget_max, budget_min
+            return "range", budget_min, budget_max
+
+    min_match = re.search(
+        r"(?:от|с)\s*(\d[\d\s]{1,8})(?:\s*(руб|р|₽|тыс|тысяч[аи]?|k))?(?!\s*(?:до|-|–|—))",
+        lowered,
+    )
+    if min_match:
+        raw_value, unit = min_match.groups()
+        try:
+            value = float(raw_value.replace(" ", ""))
+        except ValueError:
+            value = None
+        if value is not None:
+            if unit in {"тыс", "тысяча", "тысячи", "тысяч", "k"}:
+                value *= 1000
+            if 300 <= value <= 300000:
+                return "min", value, None
+
+    max_match = re.search(
+        r"(?:до|не\s+дороже|не\s+выше|максимум|макс(?:имум)?|в\s+пределах|в\s+районе|примерно|около|за)\s*(\d[\d\s]{1,8})(?:\s*(руб|р|₽|тыс|тысяч[аи]?|k))?",
+        lowered,
+    )
+    if max_match:
+        raw_value, unit = max_match.groups()
+        try:
+            value = float(raw_value.replace(" ", ""))
+        except ValueError:
+            value = None
+        if value is not None:
+            if unit in {"тыс", "тысяча", "тысячи", "тысяч", "k"}:
+                value *= 1000
+            if 300 <= value <= 300000:
+                return "numeric", None, value
+
+    budget_text, budget_max = _budget_from_text(text)
+    return budget_text, None, budget_max
 
 
 def _is_smalltalk_message(messages: list[AssistantMessageIn]) -> bool:
@@ -538,13 +642,14 @@ def _extract_criteria_fallback(messages: list[AssistantMessageIn]) -> dict:
             recipient = candidate
             break
 
-    budget_text, budget_max = _budget_from_text(conversation)
-    needs_budget = budget_max is None and budget_text is None and not any(intents.values())
+    budget_text, budget_min, budget_max = _extract_budget_range(conversation)
+    needs_budget = budget_max is None and budget_min is None and budget_text is None and not any(intents.values())
 
     return {
         "style": style,
         "recipient": recipient,
         "budget_text": budget_text,
+        "budget_min": budget_min,
         "budget_max": budget_max,
         "intents": intents,
         "needs_budget": needs_budget,
@@ -671,25 +776,33 @@ def _extract_criteria_with_ollama(messages: list[AssistantMessageIn]) -> dict:
         return _extract_criteria_fallback(messages)
 
     budget_text = parsed.get("budget_text")
+    budget_min = parsed.get("budget_min")
     budget_max = parsed.get("budget_max")
+    if budget_min is not None:
+        try:
+            budget_min = float(budget_min)
+        except (TypeError, ValueError):
+            budget_min = None
     if budget_max is not None:
         try:
             budget_max = float(budget_max)
         except (TypeError, ValueError):
             budget_max = None
 
-    if budget_max is None and budget_text:
-        _, inferred_budget = _budget_from_text(str(budget_text))
-        budget_max = inferred_budget
+    if (budget_min is None and budget_max is None) and budget_text:
+        _, inferred_budget_min, inferred_budget_max = _extract_budget_range(str(budget_text))
+        budget_min = inferred_budget_min
+        budget_max = inferred_budget_max
 
-    needs_budget = bool(parsed.get("needs_budget")) and budget_max is None and not budget_text and not any(intents.values())
-    if budget_max is None and not budget_text and not any(intents.values()):
+    needs_budget = bool(parsed.get("needs_budget")) and budget_max is None and budget_min is None and not budget_text and not any(intents.values())
+    if budget_max is None and budget_min is None and not budget_text and not any(intents.values()):
         needs_budget = True
 
     return {
         "style": parsed.get("style"),
         "recipient": parsed.get("recipient"),
         "budget_text": budget_text,
+        "budget_min": budget_min,
         "budget_max": budget_max,
         "intents": intents,
         "needs_budget": needs_budget,
@@ -708,7 +821,10 @@ def _extract_criteria(messages: list[AssistantMessageIn]) -> dict:
     if not OLLAMA_EXTRACT_WITH_LLM:
         return fallback
 
-    has_enough_signal = bool(fallback.get("budget_max") is not None and (fallback.get("style") or fallback.get("recipient")))
+    has_enough_signal = bool(
+        (fallback.get("budget_max") is not None or fallback.get("budget_min") is not None)
+        and (fallback.get("style") or fallback.get("recipient"))
+    )
     if has_enough_signal:
         return fallback
 
@@ -720,8 +836,9 @@ def _extract_criteria(messages: list[AssistantMessageIn]) -> dict:
     return {
         "style": parsed.get("style") or fallback.get("style"),
         "recipient": parsed.get("recipient") or fallback.get("recipient"),
-        "budget_text": parsed.get("budget_text") or fallback.get("budget_text"),
-        "budget_max": parsed.get("budget_max") if parsed.get("budget_max") is not None else fallback.get("budget_max"),
+        "budget_text": fallback.get("budget_text") or parsed.get("budget_text"),
+        "budget_min": fallback.get("budget_min") if fallback.get("budget_min") is not None else parsed.get("budget_min"),
+        "budget_max": fallback.get("budget_max") if fallback.get("budget_max") is not None else parsed.get("budget_max"),
         "intents": fallback.get("intents") or {},
         "needs_budget": parsed.get("needs_budget", fallback.get("needs_budget")),
         "clarification_question": parsed.get("clarification_question") or fallback.get("clarification_question"),
@@ -745,6 +862,23 @@ def _match_reason(*, style: str | None, recipient: str | None, budget_max: float
 def _format_price_rub(value: float) -> str:
     rounded = int(round(value))
     return f"{rounded:,}".replace(",", " ") + " ₽"
+
+
+def _match_reason(*, style: str | None, recipient: str | None, budget_min: float | None, budget_max: float | None, price: float) -> str:
+    parts: list[str] = []
+    if style:
+        parts.append(f"РїРѕРґС…РѕРґРёС‚ РїРѕ СЃС‚РёР»СЋ: {style}")
+    if recipient:
+        parts.append(f"СѓРјРµСЃС‚РЅРѕ РґР»СЏ: {recipient}")
+    in_min = budget_min is None or price >= budget_min
+    in_max = budget_max is None or price <= budget_max
+    if in_min and in_max and (budget_min is not None or budget_max is not None):
+        parts.append("РІРїРёСЃС‹РІР°РµС‚СЃСЏ РІ Р±СЋРґР¶РµС‚")
+    elif budget_min is not None and price < budget_min:
+        parts.append("РЅРµРјРЅРѕРіРѕ РЅРёР¶Рµ Р±СЋРґР¶РµС‚Р°")
+    elif budget_max is not None and price > budget_max:
+        parts.append("СЃР»РµРіРєР° РІС‹С€Рµ Р±СЋРґР¶РµС‚Р°")
+    return ", ".join(parts) if parts else "РїРѕРґРѕР±СЂР°РЅ РїРѕ РІР°С€РµРјСѓ Р·Р°РїСЂРѕСЃСѓ"
 
 
 def _build_grounded_assistant_reply(
@@ -932,6 +1066,180 @@ def search_products(
     ]
 
 
+def _match_reason(*, style: str | None, recipient: str | None, budget_min: float | None, budget_max: float | None, price: float) -> str:
+    parts: list[str] = []
+    if style:
+        parts.append(f"РїРѕРґС…РѕРґРёС‚ РїРѕ СЃС‚РёР»СЋ: {style}")
+    if recipient:
+        parts.append(f"СѓРјРµСЃС‚РЅРѕ РґР»СЏ: {recipient}")
+    in_min = budget_min is None or price >= budget_min
+    in_max = budget_max is None or price <= budget_max
+    if in_min and in_max and (budget_min is not None or budget_max is not None):
+        parts.append("РІРїРёСЃС‹РІР°РµС‚СЃСЏ РІ Р±СЋРґР¶РµС‚")
+    elif budget_min is not None and price < budget_min:
+        parts.append("РЅРµРјРЅРѕРіРѕ РЅРёР¶Рµ Р±СЋРґР¶РµС‚Р°")
+    elif budget_max is not None and price > budget_max:
+        parts.append("СЃР»РµРіРєР° РІС‹С€Рµ Р±СЋРґР¶РµС‚Р°")
+    return ", ".join(parts) if parts else "РїРѕРґРѕР±СЂР°РЅ РїРѕ РІР°С€РµРјСѓ Р·Р°РїСЂРѕСЃСѓ"
+
+
+def _build_grounded_assistant_reply(
+    *,
+    criteria: dict,
+    products: list[AssistantProductOut],
+) -> str:
+    if not products:
+        return (
+            "РЎРµР№С‡Р°СЃ РЅРµ РЅР°С€С‘Р» РїРѕРґС…РѕРґСЏС‰РёС… Р±СѓРєРµС‚РѕРІ РїРѕ СЌС‚РёРј СѓСЃР»РѕРІРёСЏРј. "
+            "РњРѕРіСѓ РїРѕРґРѕР±СЂР°С‚СЊ РІР°СЂРёР°РЅС‚С‹, РµСЃР»Рё РЅРµРјРЅРѕРіРѕ СЂР°СЃС€РёСЂРёРј Р±СЋРґР¶РµС‚ РёР»Рё РёР·РјРµРЅРёРј СЃС‚РёР»СЊ."
+        )
+
+    style = criteria.get("style")
+    recipient = criteria.get("recipient")
+    budget_min = criteria.get("budget_min")
+    budget_max = criteria.get("budget_max")
+
+    intro_parts: list[str] = []
+    if recipient:
+        intro_parts.append(f"РґР»СЏ {recipient}")
+    if style:
+        intro_parts.append(f"РІ СЃС‚РёР»Рµ \"{style}\"")
+    if budget_min is not None and budget_max is not None:
+        intro_parts.append(f"РѕС‚ {_format_price_rub(float(budget_min))} РґРѕ {_format_price_rub(float(budget_max))}")
+    elif budget_min is not None:
+        intro_parts.append(f"РѕС‚ {_format_price_rub(float(budget_min))}")
+    elif budget_max is not None:
+        intro_parts.append(f"РґРѕ {_format_price_rub(float(budget_max))}")
+
+    intro = "РџРѕРґРѕР±СЂР°Р» РІР°СЂРёР°РЅС‚С‹"
+    if intro_parts:
+        intro += " " + ", ".join(intro_parts)
+    intro += "."
+
+    lines = [intro]
+    for index, product in enumerate(products[:3], start=1):
+        line = f"{index}. {product.name} вЂ” {_format_price_rub(product.price)}."
+        if product.category:
+            line += f" РљР°С‚РµРіРѕСЂРёСЏ: {product.category}."
+        if product.description:
+            line += f" {product.description.strip().rstrip('.')}."
+        if product.match_reason:
+            line += f" {product.match_reason.strip().rstrip('.')}."
+        lines.append(line)
+
+    lines.append("Р•СЃР»Рё С…РѕС‚РёС‚Рµ, РјРѕРіСѓ СЃСѓР·РёС‚СЊ РІС‹Р±РѕСЂ РїРѕ СЃС‚РёР»СЋ, РїРѕРІРѕРґСѓ РёР»Рё С‚РѕС‡РЅРѕРјСѓ Р±СЋРґР¶РµС‚Сѓ.")
+    return "\n".join(lines)
+
+
+def search_products(
+    *,
+    db: Session,
+    search_summary: str,
+    style: str | None,
+    recipient: str | None,
+    budget_min: float | None,
+    budget_max: float | None,
+    intents: dict[str, bool] | None,
+    limit: int,
+) -> list[AssistantProductOut]:
+    rows = db.query(FlowerModel).order_by(FlowerModel.price.asc(), FlowerModel.id.asc()).all()
+    if not rows:
+        return []
+
+    intents = intents or {}
+    candidates: list[tuple[float, FlowerModel]] = []
+    style_keywords = STYLE_KEYWORDS.get(_normalize_text(style), [])
+    recipient_keywords = RECIPIENT_KEYWORDS.get(_normalize_text(recipient), [])
+    query_tokens = _tokenize_search_text(search_summary)
+    compare_mode = bool(intents.get("compare"))
+    cheaper_mode = bool(intents.get("cheaper"))
+    brighter_mode = bool(intents.get("brighter"))
+
+    bright_keywords = ["СЏСЂРє", "РЅР°СЃС‹С‰", "РѕСЂР°РЅР¶", "РєСЂР°СЃ", "yellow", "orange", "red", "mix", "РјРёРєСЃ", "СЃРѕС‡РЅ"]
+    soft_keywords = ["РЅРµР¶", "white", "pink", "pastel", "РїР°СЃС‚РµР»", "РєР»Р°СЃСЃ", "СЃРїРѕРєРѕР№РЅ"]
+
+    for row in rows:
+        name_text, category_text, description_text, combined_text = _build_product_search_text(row)
+        price = float(row.price)
+        score = 0.0
+
+        score += _score_keyword_hits(name_text, style_keywords, 4.5)
+        score += _score_keyword_hits(category_text, style_keywords, 3.5)
+        score += _score_keyword_hits(description_text, style_keywords, 2.5)
+        score += _score_keyword_hits(name_text, recipient_keywords, 3.5)
+        score += _score_keyword_hits(category_text, recipient_keywords, 2.0)
+        score += _score_keyword_hits(description_text, recipient_keywords, 2.0)
+
+        for token in query_tokens:
+            if token in name_text:
+                score += 4.0
+            elif token in category_text:
+                score += 2.8
+            elif token in description_text:
+                score += 2.2
+
+        if brighter_mode:
+            score += _score_keyword_hits(combined_text, bright_keywords, 1.5)
+            score -= _score_keyword_hits(combined_text, soft_keywords, 0.8)
+
+        in_min = budget_min is None or price >= budget_min
+        in_max = budget_max is None or price <= budget_max
+        if in_min and in_max:
+            score += 4.0
+            if budget_min is not None and budget_max is not None:
+                midpoint = (budget_min + budget_max) / 2
+                span = max((budget_max - budget_min) / 2, 1.0)
+                score += max(0.0, 1.5 - abs(price - midpoint) / span)
+            elif budget_max is not None:
+                score += max(0.0, (budget_max - price) / max(budget_max, 1)) * (1.6 if cheaper_mode else 1.0)
+            elif budget_min is not None:
+                score += max(0.0, min(price - budget_min, budget_min) / max(budget_min, 1))
+        else:
+            if budget_min is not None and price < budget_min:
+                score -= 5.0 + ((budget_min - price) / max(budget_min, 1)) * 6.0
+            if budget_max is not None and price > budget_max:
+                score -= 6.0 + ((price - budget_max) / max(budget_max, 1)) * 7.0
+            if budget_min is None and budget_max is None:
+                score += 1.0
+
+        if cheaper_mode:
+            score += max(0.0, 25000.0 - min(price, 25000.0)) / 2500.0
+
+        if intents.get("alternative"):
+            score += 0.3
+
+        candidates.append((score, row))
+
+    within_budget = [
+        item
+        for item in candidates
+        if (budget_min is None or float(item[1].price) >= budget_min)
+        and (budget_max is None or float(item[1].price) <= budget_max)
+    ]
+    ranked = within_budget or candidates
+    ranked.sort(key=lambda item: (-item[0], float(item[1].price), item[1].id))
+    selected_rows = _choose_diverse_products(ranked, limit=limit, compare_mode=compare_mode)
+
+    return [
+        AssistantProductOut(
+            id=row.id,
+            name=row.name,
+            description=row.description,
+            category=row.category,
+            price=float(row.price),
+            image_url=row.image_url,
+            match_reason=_match_reason(
+                style=style,
+                recipient=recipient,
+                budget_min=budget_min,
+                budget_max=budget_max,
+                price=float(row.price),
+            ),
+        )
+        for row in selected_rows
+    ]
+
+
 def _build_assistant_reply(
     *,
     criteria: dict,
@@ -1023,6 +1331,7 @@ def _build_consultant_prompt(
             "style": criteria.get("style"),
             "recipient": criteria.get("recipient"),
             "budget_text": criteria.get("budget_text"),
+            "budget_min": criteria.get("budget_min"),
             "budget_max": criteria.get("budget_max"),
             "intents": criteria.get("intents") or {},
         },
@@ -1152,6 +1461,7 @@ def assistant_chat(payload: AssistantChatRequest, db: Session = Depends(get_db))
         style=criteria.get("style"),
         recipient=criteria.get("recipient"),
         budget_text=criteria.get("budget_text"),
+        budget_min=criteria.get("budget_min"),
         budget_max=criteria.get("budget_max"),
     )
 
@@ -1171,6 +1481,7 @@ def assistant_chat(payload: AssistantChatRequest, db: Session = Depends(get_db))
             search_summary=criteria.get("search_summary") or "",
             style=criteria.get("style"),
             recipient=criteria.get("recipient"),
+            budget_min=criteria.get("budget_min"),
             budget_max=criteria.get("budget_max"),
             intents=criteria.get("intents"),
             limit=payload.limit,
@@ -1216,6 +1527,7 @@ def assistant_chat_stream(payload: AssistantChatRequest, db: Session = Depends(g
             style=criteria.get("style"),
             recipient=criteria.get("recipient"),
             budget_text=criteria.get("budget_text"),
+            budget_min=criteria.get("budget_min"),
             budget_max=criteria.get("budget_max"),
         )
 
@@ -1239,6 +1551,7 @@ def assistant_chat_stream(payload: AssistantChatRequest, db: Session = Depends(g
                 search_summary=criteria.get("search_summary") or "",
                 style=criteria.get("style"),
                 recipient=criteria.get("recipient"),
+                budget_min=criteria.get("budget_min"),
                 budget_max=criteria.get("budget_max"),
                 intents=criteria.get("intents"),
                 limit=payload.limit,
