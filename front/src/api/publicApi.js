@@ -1,3 +1,5 @@
+import localFlowerImage from "../assets/1.jpg";
+
 const API_BASE =
   import.meta.env.VITE_API_URL?.toString().replace(/\/+$/, "") ??
   "http://127.0.0.1:8100";
@@ -41,6 +43,24 @@ async function request(path, { method = "GET", body, token } = {}) {
   return payload;
 }
 
+function resolveFlowerImage(imageUrl) {
+  const normalized = typeof imageUrl === "string" ? imageUrl.trim() : "";
+
+  if (!normalized) {
+    return localFlowerImage;
+  }
+
+  if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+    return localFlowerImage;
+  }
+
+  if (normalized.startsWith("./src/assets/")) {
+    return localFlowerImage;
+  }
+
+  return normalized;
+}
+
 export function normalizeFlower(flower) {
   return {
     id: flower.id,
@@ -49,7 +69,7 @@ export function normalizeFlower(flower) {
     description: flower.description ?? "",
     category: flower.category ?? "Другое",
     price: Number(flower.price ?? 0),
-    image: flower.image_url ?? "",
+    image: resolveFlowerImage(flower.image_url),
   };
 }
 

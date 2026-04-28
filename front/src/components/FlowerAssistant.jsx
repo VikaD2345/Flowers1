@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { streamFlowerAssistant } from "../api/publicApi";
+import { askFlowerAssistant, streamFlowerAssistant } from "../api/publicApi";
 import "./FlowerAssistant.css";
 
 const QUICK_PROMPTS = [
@@ -42,6 +42,10 @@ function FlowerAssistant({ onAddToCart, onOpenCatalog }) {
       text: trimmedText,
     };
     const assistantMessageId = `assistant-${Date.now()}`;
+    const history = [...messages, userMessage].map((message) => ({
+      role: message.role,
+      content: message.text,
+    }));
 
     setMessages((prev) => [
       ...prev,
@@ -58,10 +62,6 @@ function FlowerAssistant({ onAddToCart, onOpenCatalog }) {
     setIsLoading(true);
 
     try {
-      const history = [...messages, userMessage].map((message) => ({
-        role: message.role,
-        content: message.text,
-      }));
       let finalPayload = null;
 
       await streamFlowerAssistant(history, {
@@ -86,6 +86,7 @@ function FlowerAssistant({ onAddToCart, onOpenCatalog }) {
                     ...message,
                     text: payload?.text || message.text || "Консультант не вернул текст ответа.",
                     suggestions: Array.isArray(payload?.suggestions) ? payload.suggestions : [],
+                    isError: false,
                   }
                 : message
             )
@@ -93,28 +94,57 @@ function FlowerAssistant({ onAddToCart, onOpenCatalog }) {
         },
       });
 
-      if (!finalPayload) {
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === assistantMessageId
-              ? { ...message, text: "Не удалось получить ответ от консультанта." }
-              : message
-          )
-        );
+      if (finalPayload) {
+        return;
       }
-    } catch {
+
+      const payload = await askFlowerAssistant(history);
       setMessages((prev) =>
         prev.map((message) =>
           message.id === assistantMessageId
             ? {
                 ...message,
-                text: "Не удалось получить ответ от AI-консультанта. Проверьте backend API, Ollama и доступность базы данных.",
-                suggestions: [],
-                isError: true,
+                text: payload?.text || "Консультант не вернул текст ответа.",
+                suggestions: Array.isArray(payload?.suggestions) ? payload.suggestions : [],
+                isError: false,
               }
             : message
         )
       );
+    } catch (streamError) {
+      try {
+        const payload = await askFlowerAssistant(history);
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantMessageId
+              ? {
+                  ...message,
+                  text: payload?.text || "Консультант не вернул текст ответа.",
+                  suggestions: Array.isArray(payload?.suggestions) ? payload.suggestions : [],
+                  isError: false,
+                }
+              : message
+          )
+        );
+      } catch (fallbackError) {
+        const detail =
+          fallbackError?.message ||
+          streamError?.message ||
+          "Не удалось получить ответ от AI-консультанта.";
+
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantMessageId
+              ? {
+                  ...message,
+                  text: detail,
+                  suggestions: [],
+                  isError: true,
+                }
+              : message
+          )
+        );
+      }
     } finally {
       setIsLoading(false);
     }

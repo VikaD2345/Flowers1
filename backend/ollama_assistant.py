@@ -358,6 +358,11 @@ def _score_keyword_hits(text: str, keywords: list[str], weight: float) -> float:
     return sum(weight for keyword in keywords if keyword and keyword in text)
 
 
+def _format_price_rub(value: float) -> str:
+    rounded = int(round(value))
+    return f"{rounded:,}".replace(",", " ") + " ₽"
+
+
 def _build_product_search_text(row: FlowerModel) -> tuple[str, str, str, str]:
     name_text = _normalize_text(row.name)
     category_text = _normalize_text(row.category)

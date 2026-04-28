@@ -73,6 +73,10 @@ export default function PublicApp() {
   }, []);
 
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [currentPage]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const bootstrapSession = async () => {

@@ -58,9 +58,16 @@ OPENAPI_TAGS = [
 app = FastAPI(openapi_tags=OPENAPI_TAGS)
 app.include_router(forecast_router, prefix="/forecast", tags=["forecast"])
 
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1641,27 +1648,27 @@ def assistant_chat(payload: AssistantChatRequest, db: Session = Depends(get_db))
             source=f"grounded:{OLLAMA_REPLY_MODEL}",
         )
 
-    criteria = ollama_extract_criteria(payload.messages)
+    try:
+        criteria = ollama_extract_criteria(payload.messages)
 
-    criteria_out = AssistantCriteriaOut(
-        style=criteria.get("style"),
-        recipient=criteria.get("recipient"),
-        budget_text=criteria.get("budget_text"),
-        budget_min=criteria.get("budget_min"),
-        budget_max=criteria.get("budget_max"),
-    )
-
-    if criteria.get("needs_budget"):
-        return AssistantChatResponse(
-            reply=criteria.get("clarification_question")
-            or ASSISTANT_DEFAULT_BUDGET_QUESTION,
-            needs_clarification=True,
-            criteria=criteria_out,
-            products=[],
-            source=f"ollama:{OLLAMA_REPLY_MODEL}",
+        criteria_out = AssistantCriteriaOut(
+            style=criteria.get("style"),
+            recipient=criteria.get("recipient"),
+            budget_text=criteria.get("budget_text"),
+            budget_min=criteria.get("budget_min"),
+            budget_max=criteria.get("budget_max"),
         )
 
-    try:
+        if criteria.get("needs_budget"):
+            return AssistantChatResponse(
+                reply=criteria.get("clarification_question")
+                or ASSISTANT_DEFAULT_BUDGET_QUESTION,
+                needs_clarification=True,
+                criteria=criteria_out,
+                products=[],
+                source=f"ollama:{OLLAMA_REPLY_MODEL}",
+            )
+
         products = ollama_search_products(
             db=db,
             search_summary=criteria.get("search_summary") or "",
@@ -1680,6 +1687,16 @@ def assistant_chat(payload: AssistantChatRequest, db: Session = Depends(get_db))
                 "before requesting consultant recommendations."
             ),
         ) from exc
+    except HTTPException:
+        raise
+    except Exception:
+        return AssistantChatResponse(
+            reply=ASSISTANT_DEFAULT_BUDGET_QUESTION,
+            needs_clarification=True,
+            criteria=AssistantCriteriaOut(),
+            products=[],
+            source=f"fallback:{OLLAMA_REPLY_MODEL}",
+        )
 
     reply = ollama_build_assistant_reply(messages=payload.messages, criteria=criteria, products=products)
 
@@ -1695,43 +1712,43 @@ def assistant_chat(payload: AssistantChatRequest, db: Session = Depends(get_db))
 @app.post("/assistant/chat/stream", tags=["ollama"])
 def assistant_chat_stream(payload: AssistantChatRequest, db: Session = Depends(get_db)) -> StreamingResponse:
     def event_stream():
-        if ollama_is_smalltalk_message(payload.messages):
-            yield _sse_event(
-                {
-                    "type": "done",
-                    "reply": ollama_build_smalltalk_reply(payload.messages),
-                    "criteria": AssistantCriteriaOut().model_dump(),
-                    "products": [],
-                    "needs_clarification": False,
-                    "source": f"grounded:{OLLAMA_REPLY_MODEL}",
-                }
-            )
-            return
-
-        criteria = ollama_extract_criteria(payload.messages)
-        criteria_out = AssistantCriteriaOut(
-            style=criteria.get("style"),
-            recipient=criteria.get("recipient"),
-            budget_text=criteria.get("budget_text"),
-            budget_min=criteria.get("budget_min"),
-            budget_max=criteria.get("budget_max"),
-        )
-
-        if criteria.get("needs_budget"):
-            reply = criteria.get("clarification_question") or ASSISTANT_DEFAULT_BUDGET_QUESTION
-            yield _sse_event(
-                {
-                    "type": "done",
-                    "reply": reply,
-                    "criteria": criteria_out.model_dump(),
-                    "products": [],
-                    "needs_clarification": True,
-                    "source": f"ollama:{OLLAMA_REPLY_MODEL}",
-                }
-            )
-            return
-
         try:
+            if ollama_is_smalltalk_message(payload.messages):
+                yield _sse_event(
+                    {
+                        "type": "done",
+                        "reply": ollama_build_smalltalk_reply(payload.messages),
+                        "criteria": AssistantCriteriaOut().model_dump(),
+                        "products": [],
+                        "needs_clarification": False,
+                        "source": f"grounded:{OLLAMA_REPLY_MODEL}",
+                    }
+                )
+                return
+
+            criteria = ollama_extract_criteria(payload.messages)
+            criteria_out = AssistantCriteriaOut(
+                style=criteria.get("style"),
+                recipient=criteria.get("recipient"),
+                budget_text=criteria.get("budget_text"),
+                budget_min=criteria.get("budget_min"),
+                budget_max=criteria.get("budget_max"),
+            )
+
+            if criteria.get("needs_budget"):
+                reply = criteria.get("clarification_question") or ASSISTANT_DEFAULT_BUDGET_QUESTION
+                yield _sse_event(
+                    {
+                        "type": "done",
+                        "reply": reply,
+                        "criteria": criteria_out.model_dump(),
+                        "products": [],
+                        "needs_clarification": True,
+                        "source": f"ollama:{OLLAMA_REPLY_MODEL}",
+                    }
+                )
+                return
+
             products = ollama_search_products(
                 db=db,
                 search_summary=criteria.get("search_summary") or "",
@@ -1743,14 +1760,45 @@ def assistant_chat_stream(payload: AssistantChatRequest, db: Session = Depends(g
                 limit=payload.limit,
             )
         except SQLAlchemyError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Database is unavailable. Connect Radmin VPN and ensure PostgreSQL is reachable "
-                    "before requesting consultant recommendations."
-                ),
-            ) from exc
-
+            yield _sse_event(
+                {
+                    "type": "done",
+                    "reply": (
+                        "Database is unavailable. Connect Radmin VPN and ensure PostgreSQL is reachable "
+                        "before requesting consultant recommendations."
+                    ),
+                    "criteria": AssistantCriteriaOut().model_dump(),
+                    "products": [],
+                    "needs_clarification": True,
+                    "source": f"error:{OLLAMA_REPLY_MODEL}",
+                }
+            )
+            return
+        except HTTPException as exc:
+            yield _sse_event(
+                {
+                    "type": "done",
+                    "reply": exc.detail if isinstance(exc.detail, str) else ASSISTANT_DEFAULT_BUDGET_QUESTION,
+                    "criteria": AssistantCriteriaOut().model_dump(),
+                    "products": [],
+                    "needs_clarification": True,
+                    "source": f"error:{OLLAMA_REPLY_MODEL}",
+                }
+            )
+            return
+        except Exception:
+            yield _sse_event(
+                {
+                    "type": "done",
+                    "reply": ASSISTANT_DEFAULT_BUDGET_QUESTION,
+                    "criteria": AssistantCriteriaOut().model_dump(),
+                    "products": [],
+                    "needs_clarification": True,
+                    "source": f"fallback:{OLLAMA_REPLY_MODEL}",
+                }
+            )
+            return
+        
         products_out = _assistant_products_out(products)
 
         if not products:
