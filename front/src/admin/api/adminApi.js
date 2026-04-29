@@ -129,3 +129,24 @@ export async function adminListAudit({ limit = 100 } = {}) {
   params.set("limit", String(limit));
   return adminFetch(`/admin/audit?${params.toString()}`);
 }
+
+export async function adminForecastHealth() {
+  return adminFetch("/forecast/health");
+}
+
+export async function adminForecastMetrics({ testDays = 30 } = {}) {
+  const params = new URLSearchParams();
+  params.set("test_days", String(testDays));
+  return adminFetch(`/forecast/metrics?${params.toString()}`);
+}
+
+export async function adminForecastList({ days = 30, safetyStock = 0.15 } = {}) {
+  const params = new URLSearchParams();
+  params.set("days", String(days));
+  params.set("safety_stock", String(safetyStock));
+  return adminFetch(`/forecast?${params.toString()}`);
+}
+
+export async function adminForecastRetrain() {
+  return adminFetch("/forecast/retrain", { method: "POST" });
+}

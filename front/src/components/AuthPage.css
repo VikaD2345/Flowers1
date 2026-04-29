@@ -6,15 +6,33 @@
 }
 
 .register-left {
+  position: relative;
   background: url("../assets/cover_log.png") center / cover no-repeat;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 40px;
+  overflow: hidden;
+}
+
+.register-left::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(243, 198, 209, 0) 68%,
+    rgba(243, 198, 209, 0.32) 82%,
+    rgba(243, 198, 209, 0.72) 92%,
+    #f3c6d1 100%
+  );
+  pointer-events: none;
 }
 
 .register-logo {
+  position: relative;
+  z-index: 1;
   width: min(72%, 430px);
   opacity: 0.82;
 }

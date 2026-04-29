@@ -152,3 +152,7 @@ body {
   margin: 0;
   font-family: "CormorantGaramond", sans-serif;
 }
+
+#tr-popup {
+  display: none !important;
+}

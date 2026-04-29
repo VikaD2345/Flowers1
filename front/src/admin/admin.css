@@ -284,6 +284,56 @@
   font-size: 12px;
 }
 
+.adminSectionHeader {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.adminSectionText {
+  margin-top: 4px;
+  color: var(--admin-muted);
+  line-height: 1.5;
+}
+
+.adminInlineControls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.adminInlineControls .adminField {
+  min-width: 160px;
+  flex: 1 1 160px;
+}
+
+.adminStatsList {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.adminStatsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.adminStatsRow span {
+  color: var(--admin-muted);
+}
+
+.adminStatsRow strong {
+  font-size: 15px;
+}
+
 @media (max-width: 960px) {
   .adminShell {
     grid-template-columns: 1fr;
@@ -299,6 +349,10 @@
   }
 
   .adminTopbar {
+    flex-wrap: wrap;
+  }
+
+  .adminSectionHeader {
     flex-wrap: wrap;
   }
 
