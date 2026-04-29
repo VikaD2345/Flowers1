@@ -51,10 +51,8 @@ services:
     ports:
       - "8100:8100"
     depends_on:
-      - db
       - ollama
     environment:
-      DATABASE_URL: postgresql+psycopg2://flowers_user:flowers_pass@db:5432/flowers_db
       OLLAMA_BASE_URL: http://ollama:11434
 
   front:
