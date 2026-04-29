@@ -7,6 +7,7 @@ import { AdminOrdersPage } from "./pages/AdminOrdersPage";
 import { AdminProductsPage } from "./pages/AdminProductsPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { AdminAuditPage } from "./pages/AdminAuditPage";
+import { AdminForecastPage } from "./pages/AdminForecastPage";
 
 export function AdminApp() {
   return (
@@ -23,6 +24,7 @@ export function AdminApp() {
         <Route path="/dashboard" element={<AdminDashboardPage />} />
         <Route path="/orders" element={<AdminOrdersPage />} />
         <Route path="/products" element={<AdminProductsPage />} />
+        <Route path="/forecast" element={<AdminForecastPage />} />
         <Route path="/users" element={<AdminUsersPage />} />
         <Route path="/audit" element={<AdminAuditPage />} />
       </Route>
@@ -30,4 +32,3 @@ export function AdminApp() {
     </Routes>
   );
 }
-

@@ -120,7 +120,7 @@ function AccountPage({ user, cartItems, orders, onBackHome, onOpenCatalog, onLog
                       <div className="account-order-items">
                         {order.items.map((item) => (
                           <div className="account-order-item" key={`${order.id}-${item.id}`}>
-                            <img src=" ./src/assets/1.jpg" alt={item.title} className="account-order-item-image" />
+                            <img src={item.image} alt={item.title} className="account-order-item-image" />
                             <div>
                               <h3>{item.title}</h3>
                               <p>{item.qty} шт. x {item.price} ₽</p>
