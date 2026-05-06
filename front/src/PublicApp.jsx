@@ -3,6 +3,7 @@ import "./App.css";
 import Header from "./components/Header";
 import Main1 from "./components/Heros";
 import Popular from "./components/Popular";
+import AboutUs from "./components/AboutUs";
 import Benefits from "./components/Benefits";
 import FAQ from "./components/FAQ";
 import Gallery from "./components/Gallery";
@@ -10,6 +11,7 @@ import Location from "./components/Location";
 import Footer from "./components/Footer";
 import CartPage from "./components/CartPage";
 import CatalogPage from "./components/CatalogPage";
+import ProductPage from "./components/ProductPage";
 import AuthPage from "./components/AuthPage";
 import AccountPage from "./components/AccountPage";
 import CheckoutPage from "./components/CheckoutPage";
@@ -38,6 +40,7 @@ export default function PublicApp() {
   const [currentPage, setCurrentPage] = useState("home");
   const [authInitialMode, setAuthInitialMode] = useState("register");
   const [products, setProducts] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [cartItems, setCartItems] = useState([]);
   const [authUser, setAuthUser] = useState(null);
   const [orders, setOrders] = useState([]);
@@ -180,8 +183,17 @@ export default function PublicApp() {
   };
 
   const goToCatalog = () => {
+    setSelectedProduct(null);
     setPageError("");
     setCurrentPage("catalog");
+  };
+
+  const openProductPage = (product, page = currentPage) => {
+    setSelectedProduct(product);
+    setPageError("");
+    if (page) {
+      setCurrentPage(page);
+    }
   };
 
   const openAuthPage = (mode = "register", message = "") => {
@@ -196,6 +208,7 @@ export default function PublicApp() {
       return;
     }
 
+    setSelectedProduct(null);
     setPageError("");
     setCurrentPage(page);
   };
@@ -451,6 +464,7 @@ export default function PublicApp() {
         <CatalogPage
           products={products}
           onAddToCart={addToCart}
+          onOpenProduct={openProductPage}
           isLoading={isCatalogLoading}
           error={catalogError || pageError}
         />
@@ -458,6 +472,7 @@ export default function PublicApp() {
         <>
           <Main1 />
           <Popular products={products} onAddToCart={addToCart} goToCatalog={goToCatalog} />
+          <AboutUs />
           <Benefits />
           <FAQ />
           <Gallery />
@@ -469,11 +484,19 @@ export default function PublicApp() {
           onIncrease={increaseQty}
           onDecrease={decreaseQty}
           onRemove={removeFromCart}
+          onOpenProduct={(product) => openProductPage(product, "cart")}
           goToCatalog={goToCatalog}
           onCheckout={handleCheckoutOpen}
           maxItemQty={MAX_CART_ITEM_QTY}
         />
       )}
+      {selectedProduct ? (
+        <ProductPage
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+          onAddToCart={addToCart}
+        />
+      ) : null}
       <Footer />
       <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
     </div>

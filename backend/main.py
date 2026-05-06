@@ -1804,6 +1804,53 @@ def assistant_chat_stream(payload: AssistantChatRequest, db: Session = Depends(g
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+@app.post("/auth/register", response_model=UserOut, tags=["guest"])
+def register(payload: UserRegister, db: Session = Depends(get_db)) -> UserOut:
+    exists = db.query(UserModel).filter(UserModel.username == payload.username).one_or_none()
+    if exists is not None:
+        raise HTTPException(status_code=400, detail="Пользователь с таким именем уже существует")
+
+    user = UserModel(
+        username=payload.username,
+        password_hash=pwd_context.hash(payload.password),
+        role=UserRole.user,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return UserOut(id=user.id, username=user.username, role=user.role)
+
+
+@app.post("/auth/login", response_model=TokenOut, tags=["guest"])
+def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenOut:
+    user = db.query(UserModel).filter(UserModel.username == payload.username).one_or_none()
+    if user is None or not pwd_context.verify(payload.password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Неверное имя пользователя или пароль")
+
+    access_token = _create_access_token(sub=user.username, role=user.role.value)
+    refresh_token = _create_refresh_token(sub=user.username, role=user.role.value)
+    return TokenOut(access_token=access_token, refresh_token=refresh_token)
+
+
+@app.post("/auth/refresh", response_model=TokenOut, tags=["guest"])
+def refresh_access_token(payload: RefreshTokenIn, db: Session = Depends(get_db)) -> TokenOut:
+    decoded = _decode_token(payload.refresh_token, expected_type="refresh")
+    username = decoded["sub"]
+
+    user = db.query(UserModel).filter(UserModel.username == username).one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    access_token = _create_access_token(sub=user.username, role=user.role.value)
+    refresh_token = _create_refresh_token(sub=user.username, role=user.role.value)
+    return TokenOut(access_token=access_token, refresh_token=refresh_token)
+
+
+@app.get("/me", response_model=UserOut, tags=["user"])
+def me(current_user: UserModel = Depends(get_current_user)) -> UserOut:
+    return UserOut(id=current_user.id, username=current_user.username, role=current_user.role)
+
+
 @app.get("/flowers", response_model=list[FlowerOut], tags=["guest"])
 def list_flowers(db: Session = Depends(get_db)) -> list[FlowerOut]:
     rows = db.query(FlowerModel).order_by(FlowerModel.id.asc()).all()

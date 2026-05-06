@@ -42,9 +42,9 @@ export function AdminLoginPage() {
   return (
     <div className="adminLoginWrap">
       <div className="adminLoginCard">
-        <div style={{ fontWeight: 800, fontSize: 20 }}>Admin sign in</div>
+        <div style={{ fontWeight: 800, fontSize: 20 }}>Вход в админку</div>
         <div className="adminHelp">
-          Demo credentials from backend bootstrap: <b>admin/admin</b>
+          Тестовые данные из начальной настройки сервера: <b>admin/admin</b>
         </div>
         {error ? (
           <div style={{ marginTop: 10, color: "rgba(255,255,255,0.92)" }}>
@@ -55,7 +55,7 @@ export function AdminLoginPage() {
 
         <form onSubmit={onSubmit}>
           <div className="adminField">
-            <label htmlFor="admin-username">Username</label>
+            <label htmlFor="admin-username">Логин</label>
             <input
               id="admin-username"
               value={username}
@@ -65,7 +65,7 @@ export function AdminLoginPage() {
             />
           </div>
           <div className="adminField">
-            <label htmlFor="admin-password">Password</label>
+            <label htmlFor="admin-password">Пароль</label>
             <input
               id="admin-password"
               type="password"
@@ -78,7 +78,7 @@ export function AdminLoginPage() {
 
           <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
             <button type="submit" className="adminBtn adminBtnPrimary">
-              {isSubmitting ? "Signing in..." : "Sign in"}
+              {isSubmitting ? "Входим..." : "Войти"}
             </button>
             <button
               type="button"
@@ -86,7 +86,7 @@ export function AdminLoginPage() {
               onClick={() => navigate("/")}
               disabled={isSubmitting}
             >
-              Back to site
+              На сайт
             </button>
           </div>
         </form>

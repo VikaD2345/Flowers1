@@ -251,14 +251,6 @@ export function AdminForecastPage() {
               <span>RMSE</span>
               <strong>{formatMetric(metrics.rmse)}</strong>
             </div>
-            <div className="adminStatsRow">
-              <span>MAPE</span>
-              <strong>{formatPercent(metrics.mape_percent)}</strong>
-            </div>
-            <div className="adminStatsRow">
-              <span>Accuracy</span>
-              <strong>{formatPercent(metrics.accuracy)}</strong>
-            </div>
           </div>
         ) : (
           <div className="adminSectionText">Метрики пока недоступны.</div>

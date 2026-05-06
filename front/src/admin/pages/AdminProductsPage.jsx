@@ -45,7 +45,7 @@ export function AdminProductsPage() {
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(err?.message ?? "Failed to load products.");
+        setError(err?.message ?? "Не удалось загрузить товары.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -87,7 +87,7 @@ export function AdminProductsPage() {
       image_url: draft.image_url.trim(),
     };
     if (!payload.name || !payload.category || !Number.isFinite(payload.price) || !payload.image_url) {
-      setError("Please fill name, category, price and image URL.");
+      setError("Заполните название, категорию, цену и URL изображения.");
       return;
     }
 
@@ -101,12 +101,12 @@ export function AdminProductsPage() {
       }
       resetDraft();
     } catch (err) {
-      setError(err?.message ?? "Failed to save product.");
+      setError(err?.message ?? "Не удалось сохранить товар.");
     }
   };
 
   const onDelete = async (p) => {
-    const ok = window.confirm(`Delete product "${p.name}"?`);
+    const ok = window.confirm(`Удалить товар "${p.name}"?`);
     if (!ok) return;
     setError(null);
     try {
@@ -116,13 +116,13 @@ export function AdminProductsPage() {
         resetDraft();
       }
     } catch (err) {
-      setError(err?.message ?? "Failed to delete product.");
+      setError(err?.message ?? "Не удалось удалить товар.");
     }
   };
 
   const onDeleteAll = async () => {
     const ok = window.confirm(
-      "Delete all products? This will also clear carts and remove all orders linked to these products."
+      "Удалить все товары? Это также очистит корзины и удалит все заказы, связанные с этими товарами."
     );
     if (!ok) return;
 
@@ -133,7 +133,7 @@ export function AdminProductsPage() {
       setProducts([]);
       resetDraft();
     } catch (err) {
-      setError(err?.message ?? "Failed to delete all products.");
+      setError(err?.message ?? "Не удалось удалить все товары.");
     } finally {
       setIsDeletingAll(false);
     }
@@ -144,9 +144,9 @@ export function AdminProductsPage() {
       <div className="adminCard adminCol12">
         <div style={{ display: "flex", gap: 12, alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 18 }}>Products</div>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>Товары</div>
             <div style={{ color: "rgba(255,255,255,0.68)", marginTop: 4 }}>
-              Create, edit and delete bouquets.
+              Создавайте, редактируйте и удаляйте букеты.
             </div>
           </div>
           <button
@@ -155,13 +155,13 @@ export function AdminProductsPage() {
             onClick={onDeleteAll}
             disabled={isLoading || isDeletingAll}
           >
-            {isDeletingAll ? "Deleting..." : "Delete all products"}
+            {isDeletingAll ? "Удаляем..." : "Удалить все товары"}
           </button>
         </div>
 
         {error ? (
           <div style={{ marginTop: 12 }}>
-            <span className="adminBadge adminBadgeDanger">Error</span>{" "}
+            <span className="adminBadge adminBadgeDanger">Ошибка</span>{" "}
             <span style={{ color: "rgba(255,255,255,0.78)" }}>{error}</span>
           </div>
         ) : null}
@@ -169,11 +169,11 @@ export function AdminProductsPage() {
         <div className="adminGrid" style={{ marginTop: 14 }}>
           <div className="adminCard adminCol6">
             <div style={{ fontWeight: 700, marginBottom: 8 }}>
-              {editingId ? `Edit #${editingId}` : "Create product"}
+              {editingId ? `Редактирование #${editingId}` : "Создать товар"}
             </div>
             <form onSubmit={onSubmit}>
               <div className="adminField">
-                <label htmlFor="p-name">Name</label>
+                <label htmlFor="p-name">Название</label>
                 <input
                   id="p-name"
                   value={draft.name}
@@ -181,7 +181,7 @@ export function AdminProductsPage() {
                 />
               </div>
               <div className="adminField">
-                <label htmlFor="p-price">Price</label>
+                <label htmlFor="p-price">Цена</label>
                 <input
                   id="p-price"
                   value={draft.price}
@@ -190,7 +190,7 @@ export function AdminProductsPage() {
                 />
               </div>
               <div className="adminField">
-                <label htmlFor="p-category">Category</label>
+                <label htmlFor="p-category">Категория</label>
                 <input
                   id="p-category"
                   value={draft.category}
@@ -198,7 +198,7 @@ export function AdminProductsPage() {
                 />
               </div>
               <div className="adminField">
-                <label htmlFor="p-description">Description</label>
+                <label htmlFor="p-description">Описание</label>
                 <textarea
                   id="p-description"
                   value={draft.description}
@@ -207,7 +207,7 @@ export function AdminProductsPage() {
                 />
               </div>
               <div className="adminField">
-                <label htmlFor="p-image">Image URL</label>
+                <label htmlFor="p-image">URL изображения</label>
                 <input
                   id="p-image"
                   value={draft.image_url}
@@ -217,28 +217,28 @@ export function AdminProductsPage() {
 
               <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
                 <button type="submit" className="adminBtn adminBtnPrimary">
-                  {editingId ? "Save changes" : "Create"}
+                  {editingId ? "Сохранить" : "Создать"}
                 </button>
                 <button type="button" className="adminBtn" onClick={resetDraft}>
-                  Reset
+                  Сбросить
                 </button>
               </div>
             </form>
           </div>
 
           <div className="adminCard adminCol6">
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>All products</div>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Все товары</div>
             {isLoading ? (
-              <div style={{ color: "rgba(255,255,255,0.72)" }}>Loading...</div>
+              <div style={{ color: "rgba(255,255,255,0.72)" }}>Загрузка...</div>
             ) : (
               <div style={{ overflowX: "auto" }}>
-                <table className="adminTable" aria-label="Products table">
+                <table className="adminTable" aria-label="Таблица товаров">
                   <thead>
                     <tr>
                       <th style={{ width: 80 }}>ID</th>
-                      <th>Name</th>
-                      <th style={{ width: 120 }}>Price</th>
-                      <th style={{ width: 160 }}>Actions</th>
+                      <th>Название</th>
+                      <th style={{ width: 120 }}>Цена</th>
+                      <th style={{ width: 160 }}>Действия</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -258,10 +258,10 @@ export function AdminProductsPage() {
                         <td>
                           <div style={{ display: "flex", gap: 8 }}>
                             <button type="button" className="adminBtn" onClick={() => startEdit(p)}>
-                              Edit
+                              Изменить
                             </button>
                             <button type="button" className="adminBtn" onClick={() => onDelete(p)}>
-                              Delete
+                              Удалить
                             </button>
                           </div>
                         </td>
@@ -270,7 +270,7 @@ export function AdminProductsPage() {
                     {sorted.length === 0 ? (
                       <tr>
                         <td colSpan={4} style={{ color: "rgba(255,255,255,0.68)" }}>
-                          No products found.
+                          Товары не найдены.
                         </td>
                       </tr>
                     ) : null}

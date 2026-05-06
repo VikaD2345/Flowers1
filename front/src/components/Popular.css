@@ -59,6 +59,7 @@
   align-items: end;
   justify-content: space-between;
   gap: 16px;
+  margin-bottom: 12px;
   margin-top: auto;
 }
 
@@ -72,7 +73,7 @@
 
 .popular-card-price {
   font-weight: 900;
-  font-size: 24px;
+  font-size: 30px;
   color: #665f5f;
   margin: 0;
 }
