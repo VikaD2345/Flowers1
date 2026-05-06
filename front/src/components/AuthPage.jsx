@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { fetchCurrentUser, loginUser, registerUser } from "../api/publicApi";
 import { saveSession } from "../utils/authStorage";
 import "./AuthPage.css";
@@ -23,6 +23,10 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
   });
   const [registerState, setRegisterState] = useState(initialSubmitState);
   const [loginState, setLoginState] = useState(initialSubmitState);
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
   const switchMode = (nextMode) => {
     setMode(nextMode);
@@ -163,7 +167,7 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
                   <input
                     type="text"
                     name="username"
-                    placeholder="Имя"
+                    placeholder="Имя Фамилия"
                     autoComplete="username"
                     maxLength={USERNAME_MAX_LENGTH}
                     value={registerForm.username}
@@ -199,7 +203,7 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
                   <input
                     type="text"
                     name="username"
-                    placeholder="Имя"
+                    placeholder="Имя Фамилия"
                     autoComplete="username"
                     maxLength={USERNAME_MAX_LENGTH}
                     value={loginForm.username}

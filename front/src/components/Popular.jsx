@@ -21,9 +21,11 @@ const Popular = ({ products = [], onAddToCart, goToCatalog }) => {
                             <div className="popular_info">
                                 <h3 className="popular-card-title">{product.title}</h3>
                                 <p className="popular-card-description">{product.description}</p>
-                                <p className="popular-card-price">{product.price} ₽</p>
                             </div>
-                            <BuyButton onClick={() => onAddToCart(product)}/>
+                            <div className="popular-card-footer">
+                                <p className="popular-card-price">{product.price} ₽</p>
+                                <BuyButton onClick={() => onAddToCart(product)}/>
+                            </div>
                         </div>
                     </div>
                 ))}

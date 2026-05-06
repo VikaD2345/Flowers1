@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../admin.css";
 import { adminLogin, adminMe } from "../api/adminApi";
-import { setAdminToken } from "../auth/adminAuthStorage";
 
 const USERNAME_MAX_LENGTH = 50;
 const PASSWORD_MAX_LENGTH = 30;
@@ -26,7 +25,6 @@ export function AdminLoginPage() {
       if (!tokenOut?.access_token) {
         throw new Error("Сервер не вернул токен доступа.");
       }
-      setAdminToken(tokenOut.access_token);
 
       const me = await adminMe();
       if (me?.role !== "admin") {

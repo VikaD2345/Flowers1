@@ -36,6 +36,7 @@ const MAX_CART_ITEM_QTY = 30;
 
 export default function PublicApp() {
   const [currentPage, setCurrentPage] = useState("home");
+  const [authInitialMode, setAuthInitialMode] = useState("register");
   const [products, setProducts] = useState([]);
   const [cartItems, setCartItems] = useState([]);
   const [authUser, setAuthUser] = useState(null);
@@ -78,6 +79,13 @@ export default function PublicApp() {
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [currentPage]);
+
+  useEffect(() => {
+    if (currentPage === "cart" && (!authUser || !accessToken)) {
+      setAuthInitialMode("register");
+      setCurrentPage("auth");
+    }
+  }, [currentPage, authUser, accessToken]);
 
   useEffect(() => {
     let isMounted = true;
@@ -137,7 +145,9 @@ export default function PublicApp() {
       setAccessToken(null);
       setCartItems([]);
       setOrders([]);
+      setAuthInitialMode("login");
       setCurrentPage("auth");
+      return;
     }
 
     setPageError(error?.message || fallbackMessage);
@@ -174,6 +184,22 @@ export default function PublicApp() {
     setCurrentPage("catalog");
   };
 
+  const openAuthPage = (mode = "register", message = "") => {
+    setAuthInitialMode(mode);
+    setPageError(message);
+    setCurrentPage("auth");
+  };
+
+  const handlePageNavigate = (page) => {
+    if (page === "cart" && (!authUser || !accessToken)) {
+      openAuthPage("register", "Чтобы открыть корзину, сначала зарегистрируйтесь.");
+      return;
+    }
+
+    setPageError("");
+    setCurrentPage(page);
+  };
+
   const buildOptimisticCartItem = (product, qty) => {
     const productId = product.productId ?? product.id;
     return {
@@ -188,8 +214,7 @@ export default function PublicApp() {
 
   const addToCart = async (product) => {
     if (!authUser || !accessToken) {
-      setPageError("Чтобы добавить товар в корзину, сначала войдите в аккаунт.");
-      setCurrentPage("auth");
+      openAuthPage("register", "Чтобы добавить товар в корзину, сначала зарегистрируйтесь.");
       return false;
     }
 
@@ -292,6 +317,7 @@ export default function PublicApp() {
     try {
       const [cart, userOrders] = await Promise.all([fetchCart(token), fetchOrders(token)]);
       setAuthUser(user);
+      saveSession({ user });
       setAccessToken(token);
       setCartItems(cart);
       setOrders(userOrders);
@@ -318,7 +344,13 @@ export default function PublicApp() {
   };
 
   const handleProfileOpen = () => {
-    setCurrentPage(authUser ? "account" : "auth");
+    if (authUser) {
+      setPageError("");
+      setCurrentPage("account");
+      return;
+    }
+
+    openAuthPage("register");
   };
 
   const handleCheckoutOpen = () => {
@@ -327,7 +359,7 @@ export default function PublicApp() {
     }
 
     if (!authUser || !accessToken) {
-      setCurrentPage("auth");
+      openAuthPage("register", "Чтобы перейти к оформлению заказа, сначала зарегистрируйтесь.");
       return;
     }
 
@@ -358,6 +390,7 @@ export default function PublicApp() {
     return (
       <>
         <AuthPage
+          initialMode={authInitialMode}
           onBackHome={() => setCurrentPage("home")}
           onAuthSuccess={handleAuthSuccess}
         />
@@ -370,7 +403,7 @@ export default function PublicApp() {
     return (
       <div className="page">
         <Header
-          onNavigate={setCurrentPage}
+          onNavigate={handlePageNavigate}
           currentPage={currentPage}
           onOpenProfile={handleProfileOpen}
         />
@@ -392,13 +425,13 @@ export default function PublicApp() {
     return (
       <div className="page">
         <Header
-          onNavigate={setCurrentPage}
+          onNavigate={handlePageNavigate}
           currentPage={currentPage}
           onOpenProfile={handleProfileOpen}
         />
         <CheckoutPage
           items={cartItems}
-          onBackToCart={() => setCurrentPage("cart")}
+          onBackToCart={() => handlePageNavigate("cart")}
           onSubmitOrder={handleOrderSubmit}
         />
         <Footer />
@@ -410,7 +443,7 @@ export default function PublicApp() {
   return (
     <div className="page">
       <Header
-        onNavigate={setCurrentPage}
+        onNavigate={handlePageNavigate}
         currentPage={currentPage}
         onOpenProfile={handleProfileOpen}
       />
