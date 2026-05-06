@@ -1,9 +1,7 @@
 const SESSION_STORAGE_KEY = "flowersSessionUser";
-const TOKEN_STORAGE_KEY = "flowersAccessToken";
 
-export const saveSession = ({ user, token }) => {
+export const saveSession = ({ user }) => {
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user));
-  localStorage.setItem(TOKEN_STORAGE_KEY, token);
 };
 
 export const getSessionUser = () => {
@@ -21,9 +19,6 @@ export const getSessionUser = () => {
   }
 };
 
-export const getAccessToken = () => localStorage.getItem(TOKEN_STORAGE_KEY);
-
 export const logoutLocalUser = () => {
   localStorage.removeItem(SESSION_STORAGE_KEY);
-  localStorage.removeItem(TOKEN_STORAGE_KEY);
 };

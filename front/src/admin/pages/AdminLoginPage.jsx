@@ -4,6 +4,9 @@ import "../admin.css";
 import { adminLogin, adminMe } from "../api/adminApi";
 import { setAdminToken } from "../auth/adminAuthStorage";
 
+const USERNAME_MAX_LENGTH = 50;
+const PASSWORD_MAX_LENGTH = 30;
+
 export function AdminLoginPage() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("admin");
@@ -21,18 +24,18 @@ export function AdminLoginPage() {
     try {
       const tokenOut = await adminLogin({ username: username.trim(), password });
       if (!tokenOut?.access_token) {
-        throw new Error("Login failed: missing token.");
+        throw new Error("Сервер не вернул токен доступа.");
       }
       setAdminToken(tokenOut.access_token);
 
       const me = await adminMe();
       if (me?.role !== "admin") {
-        throw new Error("This account does not have administrator access.");
+        throw new Error("У этой учетной записи нет прав администратора.");
       }
 
       navigate("/admin/dashboard");
     } catch (err) {
-      setError(err?.message ?? "Login failed.");
+      setError(err?.message ?? "Не удалось выполнить вход.");
     } finally {
       setIsSubmitting(false);
     }
@@ -47,7 +50,7 @@ export function AdminLoginPage() {
         </div>
         {error ? (
           <div style={{ marginTop: 10, color: "rgba(255,255,255,0.92)" }}>
-            <span className="adminBadge adminBadgeDanger">Error</span>{" "}
+            <span className="adminBadge adminBadgeDanger">Ошибка</span>{" "}
             <span style={{ color: "rgba(255,255,255,0.78)" }}>{error}</span>
           </div>
         ) : null}
@@ -60,6 +63,7 @@ export function AdminLoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
+              maxLength={USERNAME_MAX_LENGTH}
             />
           </div>
           <div className="adminField">
@@ -70,6 +74,7 @@ export function AdminLoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
+              maxLength={PASSWORD_MAX_LENGTH}
             />
           </div>
 

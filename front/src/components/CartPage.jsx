@@ -13,7 +13,7 @@ const getItemsLabel = (count) => {
   return "товаров";
 };
 
-const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onCheckout }) => {
+const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onCheckout, maxItemQty = 30 }) => {
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const totalCount = items.reduce((sum, item) => sum + item.qty, 0);
   const totalLabel = getItemsLabel(totalCount);
@@ -60,7 +60,7 @@ const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onChec
                         type="button"
                         onClick={() => onIncrease(item)}
                         aria-label="Увеличить количество"
-                        disabled={item.isPending}
+                        disabled={item.isPending || item.qty >= maxItemQty}
                       >
                         +
                       </button>

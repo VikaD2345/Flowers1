@@ -17,9 +17,47 @@ async function readJsonSafely(res) {
   }
 }
 
+function formatValidationError(item) {
+  const field = Array.isArray(item?.loc) ? item.loc[item.loc.length - 1] : "";
+  const type = item?.type ?? "";
+
+  const fieldLabel =
+    field === "username" ? "Логин" :
+    field === "password" ? "Пароль" :
+    "Поле";
+
+  if (type === "string_too_long") {
+    const maxLength = item?.ctx?.max_length;
+    return maxLength ? `${fieldLabel} должен быть не длиннее ${maxLength} символов.` : `${fieldLabel} слишком длинный.`;
+  }
+  if (type === "string_too_short") {
+    const minLength = item?.ctx?.min_length;
+    return minLength ? `${fieldLabel} должен быть не короче ${minLength} символов.` : `${fieldLabel} слишком короткий.`;
+  }
+  if (type === "missing") {
+    return `${fieldLabel} обязателен для заполнения.`;
+  }
+
+  return item?.msg ? `${fieldLabel}: ${item.msg}` : "Проверьте правильность заполнения формы.";
+}
+
+function getErrorMessage(payload, status) {
+  if (Array.isArray(payload?.detail)) {
+    return payload.detail.map(formatValidationError).join(" ");
+  }
+  if (typeof payload?.detail === "string") {
+    return payload.detail;
+  }
+  if (typeof payload?.message === "string") {
+    return payload.message;
+  }
+  return `Ошибка запроса. Код: ${status}`;
+}
+
 async function request(path, { method = "GET", body, token } = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -30,10 +68,7 @@ async function request(path, { method = "GET", body, token } = {}) {
   const payload = await readJsonSafely(res);
 
   if (!res.ok) {
-    const detail =
-      payload?.detail ??
-      payload?.message ??
-      `Request failed with status ${res.status}`;
+    const detail = getErrorMessage(payload, res.status);
     const err = new Error(detail);
     err.status = res.status;
     err.payload = payload;
@@ -125,6 +160,18 @@ export async function loginUser({ username, password }) {
   return request("/auth/login", {
     method: "POST",
     body: { username, password },
+  });
+}
+
+export async function refreshSession() {
+  return request("/auth/refresh", {
+    method: "POST",
+  });
+}
+
+export async function logoutUser() {
+  return request("/auth/logout", {
+    method: "POST",
   });
 }
 
@@ -228,10 +275,7 @@ export async function streamFlowerAssistant(messages, { limit = 3, onMeta, onChu
 
   if (!res.ok) {
     const payload = await readJsonSafely(res);
-    const detail =
-      payload?.detail ??
-      payload?.message ??
-      `Request failed with status ${res.status}`;
+    const detail = getErrorMessage(payload, res.status);
     const err = new Error(detail);
     err.status = res.status;
     err.payload = payload;
@@ -239,7 +283,7 @@ export async function streamFlowerAssistant(messages, { limit = 3, onMeta, onChu
   }
 
   if (!res.body) {
-    throw new Error("Streaming response body is unavailable.");
+    throw new Error("Потоковый ответ сервера недоступен.");
   }
 
   const reader = res.body.getReader();

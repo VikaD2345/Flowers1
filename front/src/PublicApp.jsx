@@ -21,15 +21,18 @@ import {
   fetchCurrentUser,
   fetchFlowers,
   fetchOrders,
+  logoutUser,
+  refreshSession,
   updateCartItem,
   deleteCartItem,
 } from "./api/publicApi";
-import { getAccessToken, getSessionUser, logoutLocalUser, saveSession } from "./utils/authStorage";
+import { getSessionUser, logoutLocalUser, saveSession } from "./utils/authStorage";
 
 const PAYMENT_LABELS = {
   card: "Картой курьеру",
   cash: "Наличными курьеру",
 };
+const MAX_CART_ITEM_QTY = 30;
 
 export default function PublicApp() {
   const [currentPage, setCurrentPage] = useState("home");
@@ -81,29 +84,27 @@ export default function PublicApp() {
 
     const bootstrapSession = async () => {
       const storedUser = getSessionUser();
-      const storedToken = getAccessToken();
 
-      if (!storedUser || !storedToken) {
-        if (isMounted) {
-          setIsAppReady(true);
-        }
-        return;
+      if (storedUser && isMounted) {
+        setAuthUser(storedUser);
       }
 
       try {
+        const refreshPayload = await refreshSession();
+        const nextToken = refreshPayload.access_token;
         const [user, cart, userOrders] = await Promise.all([
-          fetchCurrentUser(storedToken),
-          fetchCart(storedToken),
-          fetchOrders(storedToken),
+          fetchCurrentUser(nextToken),
+          fetchCart(nextToken),
+          fetchOrders(nextToken),
         ]);
 
         if (!isMounted) {
           return;
         }
 
-        saveSession({ user, token: storedToken });
+        saveSession({ user });
         setAuthUser(user);
-        setAccessToken(storedToken);
+        setAccessToken(nextToken);
         setCartItems(cart);
         setOrders(userOrders);
       } catch {
@@ -142,6 +143,32 @@ export default function PublicApp() {
     setPageError(error?.message || fallbackMessage);
   };
 
+  const refreshAccessToken = async () => {
+    const refreshPayload = await refreshSession();
+    const nextToken = refreshPayload.access_token;
+    setAccessToken(nextToken);
+    return nextToken;
+  };
+
+  const runAuthenticatedRequest = async (requestFn) => {
+    if (!accessToken) {
+      const error = new Error("Not authenticated");
+      error.status = 401;
+      throw error;
+    }
+
+    try {
+      return await requestFn(accessToken);
+    } catch (error) {
+      if (error?.status !== 401) {
+        throw error;
+      }
+
+      const nextToken = await refreshAccessToken();
+      return requestFn(nextToken);
+    }
+  };
+
   const goToCatalog = () => {
     setPageError("");
     setCurrentPage("catalog");
@@ -168,6 +195,11 @@ export default function PublicApp() {
 
     const productId = product.productId ?? product.id;
     const previousCartItems = cartItems;
+    const existingItem = cartItems.find((item) => item.productId === productId);
+    if (existingItem && existingItem.qty >= MAX_CART_ITEM_QTY) {
+      setPageError(`В корзину можно добавить не больше ${MAX_CART_ITEM_QTY} шт. одного товара.`);
+      return false;
+    }
 
     setCartItems((prev) => {
       const existingItem = prev.find((item) => item.productId === productId);
@@ -181,7 +213,7 @@ export default function PublicApp() {
     setPageError("");
 
     try {
-      const nextItem = await addCartItem(accessToken, productId, 1);
+      const nextItem = await runAuthenticatedRequest((token) => addCartItem(token, productId, 1));
       setCartItems((prev) => {
         const result = [];
         let inserted = false;
@@ -212,8 +244,13 @@ export default function PublicApp() {
   };
 
   const increaseQty = async (item) => {
+    if (item.qty >= MAX_CART_ITEM_QTY) {
+      setPageError(`В корзину можно добавить не больше ${MAX_CART_ITEM_QTY} шт. одного товара.`);
+      return;
+    }
+
     try {
-      const updatedItem = await updateCartItem(accessToken, item.id, item.qty + 1);
+      const updatedItem = await runAuthenticatedRequest((token) => updateCartItem(token, item.id, item.qty + 1));
       setCartItems((prev) => prev.map((entry) => (entry.id === updatedItem.id ? updatedItem : entry)));
       setPageError("");
     } catch (error) {
@@ -228,7 +265,7 @@ export default function PublicApp() {
     }
 
     try {
-      const updatedItem = await updateCartItem(accessToken, item.id, item.qty - 1);
+      const updatedItem = await runAuthenticatedRequest((token) => updateCartItem(token, item.id, item.qty - 1));
       setCartItems((prev) => prev.map((entry) => (entry.id === updatedItem.id ? updatedItem : entry)));
       setPageError("");
     } catch (error) {
@@ -238,7 +275,7 @@ export default function PublicApp() {
 
   const removeFromCart = async (item) => {
     try {
-      await deleteCartItem(accessToken, item.id);
+      await runAuthenticatedRequest((token) => deleteCartItem(token, item.id));
       setCartItems((prev) => prev.filter((entry) => entry.id !== item.id));
       setPageError("");
     } catch (error) {
@@ -246,8 +283,7 @@ export default function PublicApp() {
     }
   };
 
-  const handleAuthSuccess = async (user) => {
-    const token = getAccessToken();
+  const handleAuthSuccess = async (user, token) => {
     if (!token) {
       setPageError("Сессия не была сохранена после входа.");
       return;
@@ -266,7 +302,12 @@ export default function PublicApp() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch {
+      // Local cleanup is still enough to close the UI session if the network is unavailable.
+    }
     logoutLocalUser();
     setAuthUser(null);
     setAccessToken(null);
@@ -295,10 +336,10 @@ export default function PublicApp() {
 
   const handleOrderSubmit = async ({ address, paymentMethod }) => {
     try {
-      const newOrder = await createOrder(accessToken, {
+      const newOrder = await runAuthenticatedRequest((token) => createOrder(token, {
         address,
         paymentMethod: PAYMENT_LABELS[paymentMethod] ?? paymentMethod,
-      });
+      }));
 
       setOrders((prev) => [newOrder, ...prev]);
       setCartItems([]);
@@ -397,6 +438,7 @@ export default function PublicApp() {
           onRemove={removeFromCart}
           goToCatalog={goToCatalog}
           onCheckout={handleCheckoutOpen}
+          maxItemQty={MAX_CART_ITEM_QTY}
         />
       )}
       <Footer />

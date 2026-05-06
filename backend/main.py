@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import os
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from pathlib import Path
@@ -10,14 +12,12 @@ from fastapi.encoders import jsonable_encoder
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session, joinedload
 
+from auth import auth_router, get_current_user, pwd_context, require_admin, UserOut
 from database import Base, engine, get_db
 from forecast import forecast_router
 from models import (
@@ -36,9 +36,11 @@ from ollama_assistant import (
     build_assistant_reply as ollama_build_assistant_reply,
     build_smalltalk_reply as ollama_build_smalltalk_reply,
     extract_criteria as ollama_extract_criteria,
+    is_flower_request as ollama_is_flower_request,
     is_smalltalk_message as ollama_is_smalltalk_message,
     search_products as ollama_search_products,
     stream_assistant_reply as ollama_stream_assistant_reply,
+    UNKNOWN_FLOWER_REQUEST_REPLY,
 )
 from prompts import (
     CRITERIA_EXTRACTION_SYSTEM_PROMPT,
@@ -56,6 +58,7 @@ OPENAPI_TAGS = [
 
 
 app = FastAPI(openapi_tags=OPENAPI_TAGS)
+app.include_router(auth_router)
 app.include_router(forecast_router, prefix="/forecast", tags=["forecast"])
 
 ALLOWED_ORIGINS = [
@@ -74,10 +77,6 @@ app.add_middleware(
 )
 
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
-JWT_ALG = os.getenv("JWT_ALG", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
-
 BOOTSTRAP_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 BOOTSTRAP_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1qaz")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
@@ -87,12 +86,8 @@ OLLAMA_EXTRACTION_MODEL = os.getenv("OLLAMA_EXTRACTION_MODEL", OLLAMA_REPLY_MODE
 OLLAMA_EXTRACT_WITH_LLM = os.getenv("OLLAMA_EXTRACT_WITH_LLM", "true").lower() == "true"
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "45"))
 
-# bcrypt currently has compatibility issues on some Python builds (e.g. 3.14 on Windows),
-# so we use a widely supported scheme that doesn't require the bcrypt wheel.
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-security = HTTPBearer(auto_error=False)
-
 DEFAULT_FLOWERS_FILE = Path(__file__).resolve().parent.parent / "front" / "src" / "product.json"
+MAX_CART_ITEM_QTY = 30
 
 
 def _ensure_schema() -> None:
@@ -178,45 +173,6 @@ def on_startup() -> None:
         db.close()
 
 
-def _create_access_token(*, sub: str, role: str) -> str:
-    now = datetime.now(timezone.utc)
-    payload = {
-        "sub": sub,
-        "role": role,
-        "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp()),
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
-
-
-def get_current_user(
-    creds: HTTPAuthorizationCredentials | None = Depends(security),
-    db: Session = Depends(get_db),
-) -> UserModel:
-    if creds is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-
-    token = creds.credentials
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
-        username = payload.get("sub")
-        if not username:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-    user = db.query(UserModel).filter(UserModel.username == username).one_or_none()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
-
-
-def require_admin(user: UserModel = Depends(get_current_user)) -> UserModel:
-    if user.role != UserRole.admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
-    return user
-
-
 def _audit(
     *,
     db: Session,
@@ -274,38 +230,17 @@ class FlowerOut(FlowerBase):
     id: int
 
 
-class UserRegister(BaseModel):
-    username: str = Field(min_length=3, max_length=64)
-    password: str = Field(min_length=6, max_length=128)
-
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
-
-
-class UserOut(BaseModel):
-    id: int
-    username: str
-    role: UserRole
-
-
 class AdminUserOut(UserOut):
     created_at: datetime
 
 
-class TokenOut(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
 class CartItemAdd(BaseModel):
     flower_id: int
-    qty: int = Field(gt=0)
+    qty: int = Field(gt=0, le=MAX_CART_ITEM_QTY)
 
 
 class CartItemUpdate(BaseModel):
-    qty: int = Field(gt=0)
+    qty: int = Field(gt=0, le=MAX_CART_ITEM_QTY)
 
 
 class CartItemOut(BaseModel):
@@ -360,6 +295,7 @@ class AssistantMessageIn(BaseModel):
 class AssistantCriteriaOut(BaseModel):
     style: str | None = None
     recipient: str | None = None
+    occasion: str | None = None
     budget_text: str | None = None
     budget_min: float | None = None
     budget_max: float | None = None
@@ -493,11 +429,11 @@ def _budget_range_from_text(text: str) -> tuple[str | None, float | None, float 
     numeric_values = _extract_budget_candidates(text)
     if numeric_values:
         return "numeric", None, max(numeric_values)
-    if any(token in lowered for token in ["РЅРµРґРѕСЂРѕРі", "РґРµС€РµРІ", "Р±СЋРґР¶РµС‚", "СЌРєРѕРЅРѕРј"]):
+    if any(token in lowered for token in ["недорог", "дешев", "бюджет", "эконом"]):
         return "budget", None, 3500.0
-    if any(token in lowered for token in ["СЃСЂРµРґРЅ", "РѕРїС‚РёРјР°Р»"]):
+    if any(token in lowered for token in ["средн", "оптимал"]):
         return "mid", None, 6000.0
-    if any(token in lowered for token in ["РїСЂРµРјРёСѓРј", "РґРѕСЂРѕРі", "СЂРѕСЃРєРѕС€", "Р»СЋРєСЃ"]):
+    if any(token in lowered for token in ["премиум", "дорог", "роскош", "люкс"]):
         return "premium", None, 12000.0
     return None, None, None
 
@@ -889,18 +825,18 @@ def _format_price_rub(value: float) -> str:
 def _match_reason(*, style: str | None, recipient: str | None, budget_min: float | None, budget_max: float | None, price: float) -> str:
     parts: list[str] = []
     if style:
-        parts.append(f"РїРѕРґС…РѕРґРёС‚ РїРѕ СЃС‚РёР»СЋ: {style}")
+        parts.append(f"подходит по стилю: {style}")
     if recipient:
-        parts.append(f"СѓРјРµСЃС‚РЅРѕ РґР»СЏ: {recipient}")
+        parts.append(f"уместно для: {recipient}")
     in_min = budget_min is None or price >= budget_min
     in_max = budget_max is None or price <= budget_max
     if in_min and in_max and (budget_min is not None or budget_max is not None):
-        parts.append("РІРїРёСЃС‹РІР°РµС‚СЃСЏ РІ Р±СЋРґР¶РµС‚")
+        parts.append("вписывается в бюджет")
     elif budget_min is not None and price < budget_min:
-        parts.append("РЅРµРјРЅРѕРіРѕ РЅРёР¶Рµ Р±СЋРґР¶РµС‚Р°")
+        parts.append("немного ниже бюджета")
     elif budget_max is not None and price > budget_max:
-        parts.append("СЃР»РµРіРєР° РІС‹С€Рµ Р±СЋРґР¶РµС‚Р°")
-    return ", ".join(parts) if parts else "РїРѕРґРѕР±СЂР°РЅ РїРѕ РІР°С€РµРјСѓ Р·Р°РїСЂРѕСЃСѓ"
+        parts.append("слегка выше бюджета")
+    return ", ".join(parts) if parts else "подобран по вашему запросу"
 
 
 def _build_grounded_assistant_reply(
@@ -1091,18 +1027,18 @@ def search_products(
 def _match_reason(*, style: str | None, recipient: str | None, budget_min: float | None, budget_max: float | None, price: float) -> str:
     parts: list[str] = []
     if style:
-        parts.append(f"РїРѕРґС…РѕРґРёС‚ РїРѕ СЃС‚РёР»СЋ: {style}")
+        parts.append(f"подходит по стилю: {style}")
     if recipient:
-        parts.append(f"СѓРјРµСЃС‚РЅРѕ РґР»СЏ: {recipient}")
+        parts.append(f"уместно для: {recipient}")
     in_min = budget_min is None or price >= budget_min
     in_max = budget_max is None or price <= budget_max
     if in_min and in_max and (budget_min is not None or budget_max is not None):
-        parts.append("РІРїРёСЃС‹РІР°РµС‚СЃСЏ РІ Р±СЋРґР¶РµС‚")
+        parts.append("вписывается в бюджет")
     elif budget_min is not None and price < budget_min:
-        parts.append("РЅРµРјРЅРѕРіРѕ РЅРёР¶Рµ Р±СЋРґР¶РµС‚Р°")
+        parts.append("немного ниже бюджета")
     elif budget_max is not None and price > budget_max:
-        parts.append("СЃР»РµРіРєР° РІС‹С€Рµ Р±СЋРґР¶РµС‚Р°")
-    return ", ".join(parts) if parts else "РїРѕРґРѕР±СЂР°РЅ РїРѕ РІР°С€РµРјСѓ Р·Р°РїСЂРѕСЃСѓ"
+        parts.append("слегка выше бюджета")
+    return ", ".join(parts) if parts else "подобран по вашему запросу"
 
 
 def _build_grounded_assistant_reply(
@@ -1112,8 +1048,8 @@ def _build_grounded_assistant_reply(
 ) -> str:
     if not products:
         return (
-            "РЎРµР№С‡Р°СЃ РЅРµ РЅР°С€С‘Р» РїРѕРґС…РѕРґСЏС‰РёС… Р±СѓРєРµС‚РѕРІ РїРѕ СЌС‚РёРј СѓСЃР»РѕРІРёСЏРј. "
-            "РњРѕРіСѓ РїРѕРґРѕР±СЂР°С‚СЊ РІР°СЂРёР°РЅС‚С‹, РµСЃР»Рё РЅРµРјРЅРѕРіРѕ СЂР°СЃС€РёСЂРёРј Р±СЋРґР¶РµС‚ РёР»Рё РёР·РјРµРЅРёРј СЃС‚РёР»СЊ."
+            "Сейчас не нашёл подходящих букетов по этим условиям. "
+            "Могу подобрать варианты, если немного расширим бюджет или изменим стиль."
         )
 
     style = criteria.get("style")
@@ -1123,33 +1059,33 @@ def _build_grounded_assistant_reply(
 
     intro_parts: list[str] = []
     if recipient:
-        intro_parts.append(f"РґР»СЏ {recipient}")
+        intro_parts.append(f"для {recipient}")
     if style:
-        intro_parts.append(f"РІ СЃС‚РёР»Рµ \"{style}\"")
+        intro_parts.append(f"в стиле \"{style}\"")
     if budget_min is not None and budget_max is not None:
-        intro_parts.append(f"РѕС‚ {_format_price_rub(float(budget_min))} РґРѕ {_format_price_rub(float(budget_max))}")
+        intro_parts.append(f"от {_format_price_rub(float(budget_min))} до {_format_price_rub(float(budget_max))}")
     elif budget_min is not None:
-        intro_parts.append(f"РѕС‚ {_format_price_rub(float(budget_min))}")
+        intro_parts.append(f"от {_format_price_rub(float(budget_min))}")
     elif budget_max is not None:
-        intro_parts.append(f"РґРѕ {_format_price_rub(float(budget_max))}")
+        intro_parts.append(f"до {_format_price_rub(float(budget_max))}")
 
-    intro = "РџРѕРґРѕР±СЂР°Р» РІР°СЂРёР°РЅС‚С‹"
+    intro = "Подобрал варианты"
     if intro_parts:
         intro += " " + ", ".join(intro_parts)
     intro += "."
 
     lines = [intro]
     for index, product in enumerate(products[:3], start=1):
-        line = f"{index}. {product.name} вЂ” {_format_price_rub(product.price)}."
+        line = f"{index}. {product.name} — {_format_price_rub(product.price)}."
         if product.category:
-            line += f" РљР°С‚РµРіРѕСЂРёСЏ: {product.category}."
+            line += f" Категория: {product.category}."
         if product.description:
             line += f" {product.description.strip().rstrip('.')}."
         if product.match_reason:
             line += f" {product.match_reason.strip().rstrip('.')}."
         lines.append(line)
 
-    lines.append("Р•СЃР»Рё С…РѕС‚РёС‚Рµ, РјРѕРіСѓ СЃСѓР·РёС‚СЊ РІС‹Р±РѕСЂ РїРѕ СЃС‚РёР»СЋ, РїРѕРІРѕРґСѓ РёР»Рё С‚РѕС‡РЅРѕРјСѓ Р±СЋРґР¶РµС‚Сѓ.")
+    lines.append("Если хотите, могу сузить выбор по стилю, поводу или точному бюджету.")
     return "\n".join(lines)
 
 
@@ -1177,8 +1113,8 @@ def search_products(
     cheaper_mode = bool(intents.get("cheaper"))
     brighter_mode = bool(intents.get("brighter"))
 
-    bright_keywords = ["СЏСЂРє", "РЅР°СЃС‹С‰", "РѕСЂР°РЅР¶", "РєСЂР°СЃ", "yellow", "orange", "red", "mix", "РјРёРєСЃ", "СЃРѕС‡РЅ"]
-    soft_keywords = ["РЅРµР¶", "white", "pink", "pastel", "РїР°СЃС‚РµР»", "РєР»Р°СЃСЃ", "СЃРїРѕРєРѕР№РЅ"]
+    bright_keywords = ["ярк", "насыщ", "оранж", "крас", "yellow", "orange", "red", "mix", "микс", "сочн"]
+    soft_keywords = ["неж", "white", "pink", "pastel", "пастел", "класс", "спокойн"]
 
     for row in rows:
         name_text, category_text, description_text, combined_text = _build_product_search_text(row)
@@ -1647,6 +1583,14 @@ def assistant_chat(payload: AssistantChatRequest, db: Session = Depends(get_db))
             products=[],
             source=f"grounded:{OLLAMA_REPLY_MODEL}",
         )
+    if not ollama_is_flower_request(payload.messages):
+        return AssistantChatResponse(
+            reply=UNKNOWN_FLOWER_REQUEST_REPLY,
+            needs_clarification=True,
+            criteria=AssistantCriteriaOut(),
+            products=[],
+            source="guard:flower-request",
+        )
 
     try:
         criteria = ollama_extract_criteria(payload.messages)
@@ -1654,6 +1598,7 @@ def assistant_chat(payload: AssistantChatRequest, db: Session = Depends(get_db))
         criteria_out = AssistantCriteriaOut(
             style=criteria.get("style"),
             recipient=criteria.get("recipient"),
+            occasion=criteria.get("occasion"),
             budget_text=criteria.get("budget_text"),
             budget_min=criteria.get("budget_min"),
             budget_max=criteria.get("budget_max"),
@@ -1674,6 +1619,7 @@ def assistant_chat(payload: AssistantChatRequest, db: Session = Depends(get_db))
             search_summary=criteria.get("search_summary") or "",
             style=criteria.get("style"),
             recipient=criteria.get("recipient"),
+            occasion=criteria.get("occasion"),
             budget_min=criteria.get("budget_min"),
             budget_max=criteria.get("budget_max"),
             intents=criteria.get("intents"),
@@ -1725,11 +1671,24 @@ def assistant_chat_stream(payload: AssistantChatRequest, db: Session = Depends(g
                     }
                 )
                 return
+            if not ollama_is_flower_request(payload.messages):
+                yield _sse_event(
+                    {
+                        "type": "done",
+                        "reply": UNKNOWN_FLOWER_REQUEST_REPLY,
+                        "criteria": AssistantCriteriaOut().model_dump(),
+                        "products": [],
+                        "needs_clarification": True,
+                        "source": "guard:flower-request",
+                    }
+                )
+                return
 
             criteria = ollama_extract_criteria(payload.messages)
             criteria_out = AssistantCriteriaOut(
                 style=criteria.get("style"),
                 recipient=criteria.get("recipient"),
+                occasion=criteria.get("occasion"),
                 budget_text=criteria.get("budget_text"),
                 budget_min=criteria.get("budget_min"),
                 budget_max=criteria.get("budget_max"),
@@ -1754,6 +1713,7 @@ def assistant_chat_stream(payload: AssistantChatRequest, db: Session = Depends(g
                 search_summary=criteria.get("search_summary") or "",
                 style=criteria.get("style"),
                 recipient=criteria.get("recipient"),
+                occasion=criteria.get("occasion"),
                 budget_min=criteria.get("budget_min"),
                 budget_max=criteria.get("budget_max"),
                 intents=criteria.get("intents"),
@@ -1842,38 +1802,6 @@ def assistant_chat_stream(payload: AssistantChatRequest, db: Session = Depends(g
         )
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-
-@app.post("/auth/register", response_model=UserOut, tags=["guest"])
-def register(payload: UserRegister, db: Session = Depends(get_db)) -> UserOut:
-    exists = db.query(UserModel).filter(UserModel.username == payload.username).one_or_none()
-    if exists is not None:
-        raise HTTPException(status_code=400, detail="Username already exists")
-
-    user = UserModel(
-        username=payload.username,
-        password_hash=pwd_context.hash(payload.password),
-        role=UserRole.user,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return UserOut(id=user.id, username=user.username, role=user.role)
-
-
-@app.post("/auth/login", response_model=TokenOut, tags=["guest"])
-def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenOut:
-    user = db.query(UserModel).filter(UserModel.username == payload.username).one_or_none()
-    if user is None or not pwd_context.verify(payload.password, user.password_hash):
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-
-    token = _create_access_token(sub=user.username, role=user.role.value)
-    return TokenOut(access_token=token)
-
-
-@app.get("/me", response_model=UserOut, tags=["user"])
-def me(current_user: UserModel = Depends(get_current_user)) -> UserOut:
-    return UserOut(id=current_user.id, username=current_user.username, role=current_user.role)
 
 
 @app.get("/flowers", response_model=list[FlowerOut], tags=["guest"])
@@ -2107,7 +2035,13 @@ def add_to_cart(
         item = CartItemModel(user_id=current_user.id, flower_id=payload.flower_id, qty=payload.qty)
         db.add(item)
     else:
-        item.qty += payload.qty
+        next_qty = item.qty + payload.qty
+        if next_qty > MAX_CART_ITEM_QTY:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cart item quantity cannot exceed {MAX_CART_ITEM_QTY}",
+            )
+        item.qty = next_qty
 
     db.commit()
     db.refresh(item)

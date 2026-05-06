@@ -44,6 +44,24 @@ class UserModel(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     orders: Mapped[list[OrderModel]] = relationship(back_populates="user")
+    refresh_tokens: Mapped[list[RefreshTokenModel]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class RefreshTokenModel(Base):
+    __tablename__ = "app_refresh_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("app_users.id"), index=True, nullable=False)
+    jti: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    replaced_by_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    user: Mapped[UserModel] = relationship(back_populates="refresh_tokens")
 
 
 class FlowerModel(Base):

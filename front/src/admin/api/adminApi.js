@@ -16,6 +16,43 @@ async function readJsonSafely(res) {
   }
 }
 
+function formatValidationError(item) {
+  const field = Array.isArray(item?.loc) ? item.loc[item.loc.length - 1] : "";
+  const type = item?.type ?? "";
+
+  const fieldLabel =
+    field === "username" ? "Логин" :
+    field === "password" ? "Пароль" :
+    "Поле";
+
+  if (type === "string_too_long") {
+    const maxLength = item?.ctx?.max_length;
+    return maxLength ? `${fieldLabel} должен быть не длиннее ${maxLength} символов.` : `${fieldLabel} слишком длинный.`;
+  }
+  if (type === "string_too_short") {
+    const minLength = item?.ctx?.min_length;
+    return minLength ? `${fieldLabel} должен быть не короче ${minLength} символов.` : `${fieldLabel} слишком короткий.`;
+  }
+  if (type === "missing") {
+    return `${fieldLabel} обязателен для заполнения.`;
+  }
+
+  return item?.msg ? `${fieldLabel}: ${item.msg}` : "Проверьте правильность заполнения формы.";
+}
+
+function getErrorMessage(payload, status) {
+  if (Array.isArray(payload?.detail)) {
+    return payload.detail.map(formatValidationError).join(" ");
+  }
+  if (typeof payload?.detail === "string") {
+    return payload.detail;
+  }
+  if (typeof payload?.message === "string") {
+    return payload.message;
+  }
+  return `Ошибка запроса. Код: ${status}`;
+}
+
 export async function adminFetch(path, { method = "GET", body, token } = {}) {
   const authToken = token ?? getAdminToken();
 
@@ -34,10 +71,7 @@ export async function adminFetch(path, { method = "GET", body, token } = {}) {
     if (res.status === 401) {
       clearAdminToken();
     }
-    const detail =
-      payload?.detail ??
-      payload?.message ??
-      `Request failed with status ${res.status}`;
+    const detail = getErrorMessage(payload, res.status);
     const err = new Error(detail);
     err.status = res.status;
     err.payload = payload;
