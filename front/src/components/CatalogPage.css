@@ -61,7 +61,6 @@
 .catalog-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
   width: 100%;
   margin-bottom: 60px;
   box-shadow: 0 0 6px 0 rgba(0, 0, 0, 0.3);
@@ -85,14 +84,26 @@
 
 .catalog-card-footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  flex-direction: column;
+  gap: 18px;
   padding: 10px 12px 12px;
+  flex: 1;
 }
 
 .catalog-card-meta {
   min-width: 0;
+  flex: 1;
+}
+
+.catalog-card-actions {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  margin-top: auto;
+  padding: 0 14px;
+  margin-bottom: 16px;
 }
 
 .catalog-card-title {
@@ -106,12 +117,12 @@
   margin: 0 0 4px;
   font-size: 16px;
   color: #777;
-  line-height: 1.3;
+  line-height: 1.5;
 }
 
 .catalog-card-price {
   margin: 0;
-  font-size: 24px;
+  font-size: 30px;
   font-weight: 700;
   color: #444;
 }
@@ -125,7 +136,7 @@
 
 .catalog-more {
   display: block;
-  margin: 34px auto 0;
+  margin: 34px auto;
   border: none;
   border-radius: 6px;
   width: 170px;
@@ -207,8 +218,12 @@
   }
 
   .catalog-card-footer {
+    gap: 14px;
+  }
+
+  .catalog-card-actions {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
   }
 
   .catalog-page .popular-card-button {

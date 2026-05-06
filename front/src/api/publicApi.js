@@ -1,4 +1,11 @@
 import localFlowerImage from "../assets/1.jpg";
+import {
+  getAccessToken,
+  getRefreshToken,
+  logoutLocalUser,
+  updateAccessToken,
+  updateRefreshToken,
+} from "../utils/authStorage";
 
 const API_BASE =
   import.meta.env.VITE_API_URL?.toString().replace(/\/+$/, "") ??
@@ -17,27 +24,84 @@ async function readJsonSafely(res) {
   }
 }
 
-async function request(path, { method = "GET", body, token } = {}) {
+let refreshPromise = null;
+
+async function createRequestError(res, payload) {
+  const detail =
+    payload?.detail ??
+    payload?.message ??
+    `Request failed with status ${res.status}`;
+  const err = new Error(detail);
+  err.status = res.status;
+  err.payload = payload;
+  return err;
+}
+
+async function doFetch(path, { method = "GET", body, token, accept } = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
+      ...(accept ? { Accept: accept } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
 
+  return res;
+}
+
+async function refreshAccessToken() {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    logoutLocalUser();
+    const err = new Error("Refresh token is missing");
+    err.status = 401;
+    throw err;
+  }
+
+  refreshPromise = (async () => {
+    const res = await doFetch("/auth/refresh", {
+      method: "POST",
+      body: { refresh_token: refreshToken },
+      token: null,
+    });
+    const payload = await readJsonSafely(res);
+
+    if (!res.ok) {
+      logoutLocalUser();
+      throw await createRequestError(res, payload);
+    }
+
+    updateAccessToken(payload?.access_token ?? "");
+    updateRefreshToken(payload?.refresh_token ?? "");
+    return payload;
+  })();
+
+  try {
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
+}
+
+async function request(path, { method = "GET", body, token, requiresAuth = false, retry = true } = {}) {
+  const authToken = token === null ? null : getAccessToken() ?? token;
+  const res = await doFetch(path, { method, body, token: authToken });
   const payload = await readJsonSafely(res);
 
+  if (res.status === 401 && requiresAuth && retry) {
+    const refreshed = await refreshAccessToken();
+    const retryToken = refreshed?.access_token ?? getAccessToken();
+    return request(path, { method, body, token: retryToken, requiresAuth, retry: false });
+  }
+
   if (!res.ok) {
-    const detail =
-      payload?.detail ??
-      payload?.message ??
-      `Request failed with status ${res.status}`;
-    const err = new Error(detail);
-    err.status = res.status;
-    err.payload = payload;
-    throw err;
+    throw await createRequestError(res, payload);
   }
 
   return payload;
@@ -129,7 +193,7 @@ export async function loginUser({ username, password }) {
 }
 
 export async function fetchCurrentUser(token) {
-  return request("/me", { token });
+  return request("/me", { token, requiresAuth: true });
 }
 
 export async function fetchFlowers() {
@@ -138,7 +202,7 @@ export async function fetchFlowers() {
 }
 
 export async function fetchCart(token) {
-  const payload = await request("/cart", { token });
+  const payload = await request("/cart", { token, requiresAuth: true });
   return Array.isArray(payload) ? payload.map(normalizeCartItem) : [];
 }
 
@@ -146,6 +210,7 @@ export async function addCartItem(token, flowerId, qty = 1) {
   const payload = await request("/cart/items", {
     method: "POST",
     token,
+    requiresAuth: true,
     body: { flower_id: flowerId, qty },
   });
   return normalizeCartItem(payload);
@@ -155,6 +220,7 @@ export async function updateCartItem(token, itemId, qty) {
   const payload = await request(`/cart/items/${itemId}`, {
     method: "PATCH",
     token,
+    requiresAuth: true,
     body: { qty },
   });
   return normalizeCartItem(payload);
@@ -164,11 +230,12 @@ export async function deleteCartItem(token, itemId) {
   return request(`/cart/items/${itemId}`, {
     method: "DELETE",
     token,
+    requiresAuth: true,
   });
 }
 
 export async function fetchOrders(token) {
-  const payload = await request("/me/orders", { token });
+  const payload = await request("/me/orders", { token, requiresAuth: true });
   return Array.isArray(payload) ? payload.map(normalizeOrder) : [];
 }
 
@@ -176,6 +243,7 @@ export async function createOrder(token, { address, paymentMethod }) {
   const payload = await request("/orders/from-cart", {
     method: "POST",
     token,
+    requiresAuth: true,
     body: {
       address,
       payment_method: paymentMethod,

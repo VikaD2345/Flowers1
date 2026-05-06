@@ -24,7 +24,13 @@ import {
   updateCartItem,
   deleteCartItem,
 } from "./api/publicApi";
-import { getAccessToken, getSessionUser, logoutLocalUser, saveSession } from "./utils/authStorage";
+import {
+  getAccessToken,
+  getRefreshToken,
+  getSessionUser,
+  logoutLocalUser,
+  saveSession,
+} from "./utils/authStorage";
 
 const PAYMENT_LABELS = {
   card: "Картой курьеру",
@@ -33,6 +39,7 @@ const PAYMENT_LABELS = {
 
 export default function PublicApp() {
   const [currentPage, setCurrentPage] = useState("home");
+  const [authInitialMode, setAuthInitialMode] = useState("register");
   const [products, setProducts] = useState([]);
   const [cartItems, setCartItems] = useState([]);
   const [authUser, setAuthUser] = useState(null);
@@ -77,13 +84,21 @@ export default function PublicApp() {
   }, [currentPage]);
 
   useEffect(() => {
+    if (currentPage === "cart" && (!authUser || !accessToken)) {
+      setAuthInitialMode("register");
+      setCurrentPage("auth");
+    }
+  }, [currentPage, authUser, accessToken]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const bootstrapSession = async () => {
       const storedUser = getSessionUser();
       const storedToken = getAccessToken();
+      const storedRefreshToken = getRefreshToken();
 
-      if (!storedUser || !storedToken) {
+      if (!storedUser || (!storedToken && !storedRefreshToken)) {
         if (isMounted) {
           setIsAppReady(true);
         }
@@ -101,9 +116,15 @@ export default function PublicApp() {
           return;
         }
 
-        saveSession({ user, token: storedToken });
+        const nextAccessToken = getAccessToken() ?? storedToken;
+        const nextRefreshToken = getRefreshToken() ?? storedRefreshToken;
+        saveSession({
+          user,
+          accessToken: nextAccessToken,
+          refreshToken: nextRefreshToken,
+        });
         setAuthUser(user);
-        setAccessToken(storedToken);
+        setAccessToken(nextAccessToken);
         setCartItems(cart);
         setOrders(userOrders);
       } catch {
@@ -136,7 +157,9 @@ export default function PublicApp() {
       setAccessToken(null);
       setCartItems([]);
       setOrders([]);
+      setAuthInitialMode("login");
       setCurrentPage("auth");
+      return;
     }
 
     setPageError(error?.message || fallbackMessage);
@@ -145,6 +168,22 @@ export default function PublicApp() {
   const goToCatalog = () => {
     setPageError("");
     setCurrentPage("catalog");
+  };
+
+  const openAuthPage = (mode = "register", message = "") => {
+    setAuthInitialMode(mode);
+    setPageError(message);
+    setCurrentPage("auth");
+  };
+
+  const handlePageNavigate = (page) => {
+    if (page === "cart" && (!authUser || !accessToken)) {
+      openAuthPage("register", "Чтобы открыть корзину, сначала зарегистрируйтесь.");
+      return;
+    }
+
+    setPageError("");
+    setCurrentPage(page);
   };
 
   const buildOptimisticCartItem = (product, qty) => {
@@ -161,8 +200,7 @@ export default function PublicApp() {
 
   const addToCart = async (product) => {
     if (!authUser || !accessToken) {
-      setPageError("Чтобы добавить товар в корзину, сначала войдите в аккаунт.");
-      setCurrentPage("auth");
+      openAuthPage("register", "Чтобы добавить товар в корзину, сначала зарегистрируйтесь.");
       return false;
     }
 
@@ -248,6 +286,7 @@ export default function PublicApp() {
 
   const handleAuthSuccess = async (user) => {
     const token = getAccessToken();
+    const refreshToken = getRefreshToken();
     if (!token) {
       setPageError("Сессия не была сохранена после входа.");
       return;
@@ -255,8 +294,14 @@ export default function PublicApp() {
 
     try {
       const [cart, userOrders] = await Promise.all([fetchCart(token), fetchOrders(token)]);
+      const nextAccessToken = getAccessToken() ?? token;
       setAuthUser(user);
-      setAccessToken(token);
+      saveSession({
+        user,
+        accessToken: nextAccessToken,
+        refreshToken,
+      });
+      setAccessToken(nextAccessToken);
       setCartItems(cart);
       setOrders(userOrders);
       setPageError("");
@@ -277,7 +322,13 @@ export default function PublicApp() {
   };
 
   const handleProfileOpen = () => {
-    setCurrentPage(authUser ? "account" : "auth");
+    if (authUser) {
+      setPageError("");
+      setCurrentPage("account");
+      return;
+    }
+
+    openAuthPage("register");
   };
 
   const handleCheckoutOpen = () => {
@@ -286,7 +337,7 @@ export default function PublicApp() {
     }
 
     if (!authUser || !accessToken) {
-      setCurrentPage("auth");
+      openAuthPage("register", "Чтобы перейти к оформлению заказа, сначала зарегистрируйтесь.");
       return;
     }
 
@@ -317,6 +368,7 @@ export default function PublicApp() {
     return (
       <>
         <AuthPage
+          initialMode={authInitialMode}
           onBackHome={() => setCurrentPage("home")}
           onAuthSuccess={handleAuthSuccess}
         />
@@ -329,7 +381,7 @@ export default function PublicApp() {
     return (
       <div className="page">
         <Header
-          onNavigate={setCurrentPage}
+          onNavigate={handlePageNavigate}
           currentPage={currentPage}
           onOpenProfile={handleProfileOpen}
         />
@@ -351,13 +403,13 @@ export default function PublicApp() {
     return (
       <div className="page">
         <Header
-          onNavigate={setCurrentPage}
+          onNavigate={handlePageNavigate}
           currentPage={currentPage}
           onOpenProfile={handleProfileOpen}
         />
         <CheckoutPage
           items={cartItems}
-          onBackToCart={() => setCurrentPage("cart")}
+          onBackToCart={() => handlePageNavigate("cart")}
           onSubmitOrder={handleOrderSubmit}
         />
         <Footer />
@@ -369,7 +421,7 @@ export default function PublicApp() {
   return (
     <div className="page">
       <Header
-        onNavigate={setCurrentPage}
+        onNavigate={handlePageNavigate}
         currentPage={currentPage}
         onOpenProfile={handleProfileOpen}
       />

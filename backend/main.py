@@ -77,6 +77,7 @@ app.add_middleware(
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_ALG = os.getenv("JWT_ALG", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "14"))
 
 BOOTSTRAP_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 BOOTSTRAP_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1qaz")
@@ -178,15 +179,49 @@ def on_startup() -> None:
         db.close()
 
 
-def _create_access_token(*, sub: str, role: str) -> str:
+def _create_token(*, sub: str, role: str, token_type: str, expires_delta: timedelta) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": sub,
         "role": role,
+        "type": token_type,
         "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp()),
+        "exp": int((now + expires_delta).timestamp()),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+
+
+def _create_access_token(*, sub: str, role: str) -> str:
+    return _create_token(
+        sub=sub,
+        role=role,
+        token_type="access",
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+
+
+def _create_refresh_token(*, sub: str, role: str) -> str:
+    return _create_token(
+        sub=sub,
+        role=role,
+        token_type="refresh",
+        expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+
+
+def _decode_token(token: str, *, expected_type: str | None = None) -> dict:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except JWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+
+    username = payload.get("sub")
+    token_type = payload.get("type")
+    if not username:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    if expected_type is not None and token_type != expected_type:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid {expected_type} token")
+    return payload
 
 
 def get_current_user(
@@ -197,13 +232,8 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     token = creds.credentials
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
-        username = payload.get("sub")
-        if not username:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    payload = _decode_token(token, expected_type="access")
+    username = payload["sub"]
 
     user = db.query(UserModel).filter(UserModel.username == username).one_or_none()
     if user is None:
@@ -296,7 +326,12 @@ class AdminUserOut(UserOut):
 
 class TokenOut(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
+
+
+class RefreshTokenIn(BaseModel):
+    refresh_token: str = Field(min_length=1)
 
 
 class CartItemAdd(BaseModel):
@@ -1867,8 +1902,23 @@ def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenOut:
     if user is None or not pwd_context.verify(payload.password, user.password_hash):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
 
-    token = _create_access_token(sub=user.username, role=user.role.value)
-    return TokenOut(access_token=token)
+    access_token = _create_access_token(sub=user.username, role=user.role.value)
+    refresh_token = _create_refresh_token(sub=user.username, role=user.role.value)
+    return TokenOut(access_token=access_token, refresh_token=refresh_token)
+
+
+@app.post("/auth/refresh", response_model=TokenOut, tags=["guest"])
+def refresh_access_token(payload: RefreshTokenIn, db: Session = Depends(get_db)) -> TokenOut:
+    decoded = _decode_token(payload.refresh_token, expected_type="refresh")
+    username = decoded["sub"]
+
+    user = db.query(UserModel).filter(UserModel.username == username).one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    access_token = _create_access_token(sub=user.username, role=user.role.value)
+    refresh_token = _create_refresh_token(sub=user.username, role=user.role.value)
+    return TokenOut(access_token=access_token, refresh_token=refresh_token)
 
 
 @app.get("/me", response_model=UserOut, tags=["user"])

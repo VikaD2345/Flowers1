@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../admin.css";
 import { adminLogin, adminMe } from "../api/adminApi";
-import { setAdminToken } from "../auth/adminAuthStorage";
 
 export function AdminLoginPage() {
   const navigate = useNavigate();
@@ -23,7 +22,6 @@ export function AdminLoginPage() {
       if (!tokenOut?.access_token) {
         throw new Error("Login failed: missing token.");
       }
-      setAdminToken(tokenOut.access_token);
 
       const me = await adminMe();
       if (me?.role !== "admin") {

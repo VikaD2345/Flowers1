@@ -109,9 +109,11 @@ const CatalogPage = ({ products, onAddToCart, isLoading, error }) => {
                 <div className="catalog-card-meta">
                   <h3 className="catalog-card-title">{product.title}</h3>
                   <p className="catalog-card-description">{product.description}</p>
-                  <p className="catalog-card-price">{product.price} ₽</p>
                 </div>
-                <BuyButton onClick={() => onAddToCart(product)} />
+                <div className="catalog-card-actions">
+                  <p className="catalog-card-price">{product.price} ₽</p>
+                  <BuyButton onClick={() => onAddToCart(product)} />
+                </div>
               </div>
             </article>
           ))}

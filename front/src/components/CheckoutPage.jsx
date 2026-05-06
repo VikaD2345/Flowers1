@@ -9,24 +9,62 @@ const paymentOptions = [
 const formatPrice = (value) => `${Number(value).toLocaleString("ru-RU")} ₽`;
 
 function CheckoutPage({ items, onBackToCart, onSubmitOrder }) {
-  const [address, setAddress] = useState("");
+  const [address, setAddress] = useState({
+    street: "",
+    house: "",
+    entrance: "",
+    apartment: "",
+  });
   const [paymentMethod, setPaymentMethod] = useState(paymentOptions[0].id);
   const [error, setError] = useState("");
 
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const totalCount = items.reduce((sum, item) => sum + item.qty, 0);
 
+  const updateAddressField = (field, value) => {
+    setAddress((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const buildDeliveryAddress = () => {
+    return `Улица ${address.street.trim()}, дом ${address.house.trim()}, подъезд ${address.entrance.trim()}, квартира ${address.apartment.trim()}`;
+  };
+
   const handleSubmit = (event) => {
     event.preventDefault();
 
-    if (!address.trim()) {
-      setError("Укажи адрес доставки.");
+    const street = address.street.trim();
+    const house = address.house.trim();
+    const entrance = address.entrance.trim();
+    const apartment = address.apartment.trim();
+
+    if (!street || !house || !entrance || !apartment) {
+      setError("Заполни улицу, дом, подъезд и квартиру.");
+      return;
+    }
+
+    if (street.length < 2) {
+      setError("Укажи корректное название улицы.");
+      return;
+    }
+
+    if (!/^[0-9A-Za-zА-Яа-я\-/]+$/.test(house)) {
+      setError("Проверь номер дома.");
+      return;
+    }
+
+    if (!/^[0-9]+$/.test(entrance)) {
+      setError("Подъезд должен содержать только цифры.");
+      return;
+    }
+
+    if (!/^[0-9A-Za-zА-Яа-я\-]+$/.test(apartment)) {
+      setError("Проверь номер квартиры.");
       return;
     }
 
     setError("");
     onSubmitOrder({
-      address: address.trim(),
+      address: buildDeliveryAddress(),
       paymentMethod,
     });
   };
@@ -48,12 +86,48 @@ function CheckoutPage({ items, onBackToCart, onSubmitOrder }) {
           <form className="checkout-card" onSubmit={handleSubmit}>
             <div className="checkout-section">
               <h2 className="checkout-section-title">Адрес заказа</h2>
-              <textarea
-                className="checkout-textarea"
-                placeholder="Город, улица, дом, подъезд, этаж, квартира"
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
-              />
+              <div className="checkout-address-grid">
+                <label className="checkout-field">
+                  <span>Улица</span>
+                  <input
+                    className="checkout-input"
+                    placeholder="Например, Ленина"
+                    value={address.street}
+                    onChange={(event) => updateAddressField("street", event.target.value)}
+                  />
+                </label>
+
+                <label className="checkout-field">
+                  <span>Дом</span>
+                  <input
+                    className="checkout-input"
+                    placeholder="Например, 12А"
+                    value={address.house}
+                    onChange={(event) => updateAddressField("house", event.target.value)}
+                  />
+                </label>
+
+                <label className="checkout-field">
+                  <span>Подъезд</span>
+                  <input
+                    className="checkout-input"
+                    placeholder="Например, 3"
+                    value={address.entrance}
+                    onChange={(event) => updateAddressField("entrance", event.target.value)}
+                    inputMode="numeric"
+                  />
+                </label>
+
+                <label className="checkout-field">
+                  <span>Квартира</span>
+                  <input
+                    className="checkout-input"
+                    placeholder="Например, 45"
+                    value={address.apartment}
+                    onChange={(event) => updateAddressField("apartment", event.target.value)}
+                  />
+                </label>
+              </div>
             </div>
 
             <div className="checkout-section">

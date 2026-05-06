@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { fetchCurrentUser, loginUser, registerUser } from "../api/publicApi";
 import { saveSession } from "../utils/authStorage";
 import "./AuthPage.css";
@@ -21,6 +21,10 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
   });
   const [registerState, setRegisterState] = useState(initialSubmitState);
   const [loginState, setLoginState] = useState(initialSubmitState);
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
   const switchMode = (nextMode) => {
     setMode(nextMode);
@@ -63,7 +67,11 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
       await registerUser(registerForm);
       const loginPayload = await loginUser(registerForm);
       const user = await fetchCurrentUser(loginPayload.access_token);
-      saveSession({ user, token: loginPayload.access_token });
+      saveSession({
+        user,
+        accessToken: loginPayload.access_token,
+        refreshToken: loginPayload.refresh_token,
+      });
       setRegisterForm({
         username: "",
         password: "",
@@ -105,7 +113,11 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
     try {
       const loginPayload = await loginUser(loginForm);
       const user = await fetchCurrentUser(loginPayload.access_token);
-      saveSession({ user, token: loginPayload.access_token });
+      saveSession({
+        user,
+        accessToken: loginPayload.access_token,
+        refreshToken: loginPayload.refresh_token,
+      });
 
       setLoginState({
         isLoading: false,
@@ -161,7 +173,7 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
                   <input
                     type="text"
                     name="username"
-                    placeholder="Имя"
+                    placeholder="Имя Фамилия"
                     autoComplete="username"
                     value={registerForm.username}
                     onChange={handleRegisterChange}
@@ -195,7 +207,7 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
                   <input
                     type="text"
                     name="username"
-                    placeholder="Имя"
+                    placeholder="Имя Фамилия"
                     autoComplete="username"
                     value={loginForm.username}
                     onChange={handleLoginChange}
