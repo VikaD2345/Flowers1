@@ -65,9 +65,6 @@ services:
       - "5173:5173"
     depends_on:
       - app
-    volumes:
-      - ./front:/app
-      - front_node_modules:/app/node_modules
 
   pgadmin:
     image: dpage/pgadmin4
@@ -84,4 +81,3 @@ services:
 volumes:
   postgres_data:
   ollama_data:
-  front_node_modules:

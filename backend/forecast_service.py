@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import RLock
 from pathlib import Path
 
 import joblib
@@ -29,6 +30,10 @@ POSTPROCESS_CANDIDATES = {
     "seasonal_floor": (0.0, 0.2, 0.35, 0.5),
     "doy_weight": (0.0, 0.3, 0.5, 0.7, 1.0),
 }
+_MODEL_CACHE_LOCK = RLock()
+_MODEL_CACHE: dict[Path, tuple[float, dict]] = {}
+_FORECAST_CACHE: dict[tuple[Path, float, str, int, float], list["ForecastRow"]] = {}
+_FORECAST_CACHE_MAX_SIZE = 32
 
 
 @dataclass
@@ -382,6 +387,7 @@ def _predict_series_range(
 
     model: XGBRegressor = artifact["model"]
     feature_columns: list[str] = artifact["feature_columns"]
+    booster = model.get_booster()
     min_back = max(max(LAGS), max(ROLL_WINDOWS))
     if len(history_y) < min_back:
         value = max(0.0, float(np.mean(history_y)))
@@ -395,8 +401,8 @@ def _predict_series_range(
     current_date = last_date + pd.Timedelta(days=1)
     while current_date <= end_date:
         row = _build_feature_row(current_date, history_y, context)
-        x = pd.DataFrame([row])[feature_columns]
-        yhat = max(0.0, float(model.predict(x)[0]))
+        x = np.array([[row[column] for column in feature_columns]], dtype=np.float32)
+        yhat = max(0.0, float(booster.inplace_predict(x)[0]))
         seasonal = _seasonal_anchor(current_date)
         # Keep model flexibility, but prevent long-horizon collapse to zeros.
         yhat = max(seasonal_floor * seasonal, model_weight * yhat + (1.0 - model_weight) * seasonal)
@@ -555,13 +561,38 @@ def train_and_save_model(
         "fallback": fallback,
     }
     joblib.dump(artifact, model_path)
+    clear_runtime_caches(model_path=model_path)
     return model_path
 
 
 def load_model(model_path: Path = MODEL_PATH) -> dict:
     if not model_path.exists():
         raise FileNotFoundError(f"Forecast model not found: {model_path}")
-    return joblib.load(model_path)
+
+    resolved_path = model_path.resolve()
+    model_mtime = model_path.stat().st_mtime
+    with _MODEL_CACHE_LOCK:
+        cached = _MODEL_CACHE.get(resolved_path)
+        if cached is not None and cached[0] == model_mtime:
+            return cached[1]
+
+        artifact = joblib.load(model_path)
+        _MODEL_CACHE[resolved_path] = (model_mtime, artifact)
+        return artifact
+
+
+def clear_runtime_caches(*, model_path: Path | None = None) -> None:
+    with _MODEL_CACHE_LOCK:
+        if model_path is None:
+            _MODEL_CACHE.clear()
+            _FORECAST_CACHE.clear()
+            return
+
+        resolved_path = model_path.resolve()
+        _MODEL_CACHE.pop(resolved_path, None)
+        stale_keys = [key for key in _FORECAST_CACHE if key[0] == resolved_path]
+        for key in stale_keys:
+            _FORECAST_CACHE.pop(key, None)
 
 
 def ensure_model(model_path: Path = MODEL_PATH, csv_path: Path = DATA_PATH) -> dict:
@@ -583,11 +614,24 @@ def forecast_demand(
         raise ValueError("safety_stock must be >= 0")
 
     artifact = ensure_model(model_path=model_path, csv_path=csv_path)
+    model_mtime = model_path.stat().st_mtime
+    start_date = pd.Timestamp.now().normalize()
+    cache_key = (
+        model_path.resolve(),
+        model_mtime,
+        start_date.date().isoformat(),
+        int(days),
+        round(float(safety_stock), 4),
+    )
+    with _MODEL_CACHE_LOCK:
+        cached_rows = _FORECAST_CACHE.get(cache_key)
+        if cached_rows is not None:
+            return list(cached_rows)
+
     if artifact.get("kind") != "multi_category":
         # Backward compatibility with older single-series model files.
         artifact = {"kind": "multi_category", "categories": {"_all_": artifact}, "fallback": artifact}
 
-    start_date = pd.Timestamp.now().normalize()
     target_end = start_date + pd.Timedelta(days=days - 1)
     categories: dict[str, dict] = artifact.get("categories", {})
     if not categories:
@@ -611,6 +655,11 @@ def forecast_demand(
                 purchase_plan=purchase_plan,
             )
         )
+    with _MODEL_CACHE_LOCK:
+        if len(_FORECAST_CACHE) >= _FORECAST_CACHE_MAX_SIZE:
+            oldest_key = next(iter(_FORECAST_CACHE))
+            _FORECAST_CACHE.pop(oldest_key, None)
+        _FORECAST_CACHE[cache_key] = list(rows)
     return rows
 
 
