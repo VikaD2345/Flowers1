@@ -18,7 +18,7 @@ DATA_PATH = (
 )
 MODEL_PATH = BACKEND_DIR / "xgboost_model.joblib"
 LAGS = (1, 7, 14, 28)
-ROLL_WINDOWS = (7, 14)
+ROLL_WINDOWS = (7, 14, 28)
 DEFAULT_POSTPROCESS = {
     "model_weight": 0.65,
     "seasonal_floor": 0.35,
@@ -173,22 +173,48 @@ def _build_xgb_model() -> XGBRegressor:
 def _date_features(ts: pd.Timestamp) -> dict[str, float]:
     month = float(ts.month)
     day_of_year = float(ts.dayofyear)
+    day_of_month = float(ts.day)
     day_of_week = float(ts.dayofweek)
+    week_of_year = float(ts.isocalendar().week)
     is_weekend = float(day_of_week >= 5)
     is_valentine = float(ts.month == 2 and ts.day == 14)
     is_womens_day = float(ts.month == 3 and ts.day == 8)
     is_new_year_period = float((ts.month == 12 and ts.day >= 25) or (ts.month == 1 and ts.day <= 8))
+
+    def _holiday_distance(month: int, day: int) -> float:
+        current = ts.normalize()
+        candidates = [
+            pd.Timestamp(year=ts.year - 1, month=month, day=day),
+            pd.Timestamp(year=ts.year, month=month, day=day),
+            pd.Timestamp(year=ts.year + 1, month=month, day=day),
+        ]
+        return float(min(abs((current - candidate).days) for candidate in candidates))
+
+    days_to_valentine = _holiday_distance(2, 14)
+    days_to_womens_day = _holiday_distance(3, 8)
+    days_to_new_year = _holiday_distance(12, 31)
+    nearest_flower_holiday = min(days_to_valentine, days_to_womens_day, days_to_new_year)
     return {
         "is_weekend": is_weekend,
+        "day_of_month": day_of_month,
+        "is_month_start": float(ts.day <= 3),
+        "is_month_end": float(ts.day >= 28),
+        "is_payday_period": float(ts.day <= 5 or 20 <= ts.day <= 25),
         "month_sin": float(np.sin(2.0 * np.pi * month / 12.0)),
         "month_cos": float(np.cos(2.0 * np.pi * month / 12.0)),
         "doy_sin": float(np.sin(2.0 * np.pi * day_of_year / 365.25)),
         "doy_cos": float(np.cos(2.0 * np.pi * day_of_year / 365.25)),
         "dow_sin": float(np.sin(2.0 * np.pi * day_of_week / 7.0)),
         "dow_cos": float(np.cos(2.0 * np.pi * day_of_week / 7.0)),
+        "week_sin": float(np.sin(2.0 * np.pi * week_of_year / 52.18)),
+        "week_cos": float(np.cos(2.0 * np.pi * week_of_year / 52.18)),
         "is_valentine": is_valentine,
         "is_womens_day": is_womens_day,
         "is_new_year_period": is_new_year_period,
+        "valentine_proximity": float(np.exp(-days_to_valentine / 10.0)),
+        "womens_day_proximity": float(np.exp(-days_to_womens_day / 10.0)),
+        "new_year_proximity": float(np.exp(-days_to_new_year / 12.0)),
+        "flower_holiday_proximity": float(np.exp(-nearest_flower_holiday / 10.0)),
     }
 
 
@@ -197,7 +223,9 @@ def _build_feature_row(ts: pd.Timestamp, history: list[float], context: dict[str
     for lag in LAGS:
         row[f"lag_{lag}"] = float(history[-lag])
     for window in ROLL_WINDOWS:
-        row[f"roll_mean_{window}"] = float(np.mean(history[-window:]))
+        window_values = history[-window:]
+        row[f"roll_mean_{window}"] = float(np.mean(window_values))
+        row[f"roll_std_{window}"] = float(np.std(window_values))
     if context:
         row["ctx_avg_price"] = float(context.get("avg_price", 0.0))
         row["ctx_avg_discount"] = float(context.get("avg_discount", 0.0))
