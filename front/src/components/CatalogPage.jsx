@@ -4,7 +4,7 @@ import "./CatalogPage.css";
 
 const PAGE_SIZE = 6;
 
-const CatalogPage = ({ products, onAddToCart, isLoading, error }) => {
+const CatalogPage = ({ products, onAddToCart, onOpenProduct, isLoading, error }) => {
   const [activeCategory, setActiveCategory] = useState("Все");
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -103,14 +103,30 @@ const CatalogPage = ({ products, onAddToCart, isLoading, error }) => {
 
         <div className="catalog-grid">
           {visibleProducts.map((product) => (
-            <article key={product.id} className="catalog-card">
+            <article
+              key={product.id}
+              className="catalog-card"
+              role="button"
+              tabIndex={0}
+              onClick={() => onOpenProduct?.(product)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onOpenProduct?.(product);
+                }
+              }}
+            >
               <img className="catalog-card-image" src={product.image} alt={product.title} />
               <div className="catalog-card-footer">
                 <div className="catalog-card-meta">
                   <h3 className="catalog-card-title">{product.title}</h3>
                   <p className="catalog-card-description">{product.description}</p>
                 </div>
-                <div className="catalog-card-actions">
+                <div
+                  className="catalog-card-actions"
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
                   <p className="catalog-card-price">{product.price} ₽</p>
                   <BuyButton onClick={() => onAddToCart(product)} />
                 </div>

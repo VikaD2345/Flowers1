@@ -40,7 +40,7 @@ export function RequireAdmin({ children }) {
   if (state.status === "checking") {
     return (
       <div style={{ padding: 24, color: "rgba(255,255,255,0.78)" }}>
-        Checking access...
+        Проверяем доступ...
       </div>
     );
   }
@@ -52,9 +52,9 @@ export function RequireAdmin({ children }) {
   if (state.user?.role !== "admin") {
     return (
       <div style={{ padding: 24 }}>
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>Access denied</div>
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>Доступ запрещён</div>
         <div style={{ color: "rgba(255,255,255,0.72)", lineHeight: 1.5 }}>
-          This account is not an administrator.
+          Этот аккаунт не является администратором.
         </div>
       </div>
     );

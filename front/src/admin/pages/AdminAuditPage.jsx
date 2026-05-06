@@ -28,7 +28,7 @@ export function AdminAuditPage() {
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(err?.message ?? "Failed to load audit log.");
+        setError(err?.message ?? "Не удалось загрузить журнал аудита.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -46,14 +46,14 @@ export function AdminAuditPage() {
   return (
     <div className="adminGrid">
       <div className="adminCard adminCol7">
-        <div style={{ fontWeight: 800, fontSize: 18 }}>Audit log</div>
+        <div style={{ fontWeight: 800, fontSize: 18 }}>Журнал аудита</div>
         <div style={{ color: "rgba(255,255,255,0.68)", marginTop: 4 }}>
-          Admin actions history (orders, users, products).
+          История действий администратора: заказы, пользователи и товары.
         </div>
 
         {error ? (
           <div style={{ marginTop: 12 }}>
-            <span className="adminBadge adminBadgeDanger">Error</span>{" "}
+            <span className="adminBadge adminBadgeDanger">Ошибка</span>{" "}
             <span style={{ color: "rgba(255,255,255,0.78)" }}>{error}</span>
           </div>
         ) : null}
@@ -61,17 +61,17 @@ export function AdminAuditPage() {
         <div style={{ marginTop: 14, overflowX: "auto" }}>
           {isLoading ? (
             <div style={{ color: "rgba(255,255,255,0.72)", padding: 8 }}>
-              Loading...
+              Загрузка...
             </div>
           ) : (
-            <table className="adminTable" aria-label="Audit log table">
+            <table className="adminTable" aria-label="Таблица журнала аудита">
               <thead>
                 <tr>
                   <th style={{ width: 80 }}>ID</th>
-                  <th style={{ width: 170 }}>Created</th>
-                  <th style={{ width: 140 }}>Actor</th>
-                  <th style={{ width: 160 }}>Action</th>
-                  <th>Entity</th>
+                  <th style={{ width: 170 }}>Создан</th>
+                  <th style={{ width: 140 }}>Кто</th>
+                  <th style={{ width: 160 }}>Действие</th>
+                  <th>Сущность</th>
                 </tr>
               </thead>
               <tbody>
@@ -102,7 +102,7 @@ export function AdminAuditPage() {
                 {rows.length === 0 ? (
                   <tr>
                     <td colSpan={5} style={{ color: "rgba(255,255,255,0.68)" }}>
-                      No audit events yet. Try changing an order status or editing a product.
+                      Событий аудита пока нет. Попробуйте изменить статус заказа или отредактировать товар.
                     </td>
                   </tr>
                 ) : null}
@@ -113,15 +113,15 @@ export function AdminAuditPage() {
       </div>
 
       <div className="adminCard adminCol5">
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>Details</div>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Подробности</div>
         {!selected ? (
           <div style={{ color: "rgba(255,255,255,0.68)", lineHeight: 1.5 }}>
-            Select an event to see before and after payloads.
+            Выберите событие, чтобы увидеть состояние до и после изменения.
           </div>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
             <div>
-              <div className="adminMetricLabel">Before</div>
+              <div className="adminMetricLabel">До</div>
               <pre
                 style={{
                   margin: 0,
@@ -137,7 +137,7 @@ export function AdminAuditPage() {
               </pre>
             </div>
             <div>
-              <div className="adminMetricLabel">After</div>
+              <div className="adminMetricLabel">После</div>
               <pre
                 style={{
                   margin: 0,

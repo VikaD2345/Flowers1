@@ -109,10 +109,16 @@
   align-items: start;
   padding: 26px 24px;
   border-bottom: 1px solid #ece8f1;
+  cursor: pointer;
 }
 
 .cart-item:last-child {
   border-bottom: none;
+}
+
+.cart-item:focus-visible {
+  outline: 3px solid rgba(102, 95, 95, 0.28);
+  outline-offset: -3px;
 }
 
 .cart-item-image {

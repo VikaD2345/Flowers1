@@ -25,10 +25,10 @@ const Footer = () => {
           <div className="footer-column">
             <p className="footer-heading">Контакты</p>
             <a className="footer-link" href="tel:+79991234567">
-              +7 (999) 123-45-67
+              +7 (977) 292-5745
             </a>
-            <a className="footer-link" href="mailto:hello@vamsflowers.ru">
-              hello@vamsflowers.ru
+            <a className="footer-link" href="mailto:vamstechsupport@gmail.com">
+              vamstechsupport@gmail.com
             </a>
             <p className="footer-text">Москва, доставка ежедневно с 09:00 до 21:00</p>
           </div>

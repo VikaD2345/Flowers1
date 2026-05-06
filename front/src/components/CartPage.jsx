@@ -13,7 +13,16 @@ const getItemsLabel = (count) => {
   return "товаров";
 };
 
-const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onCheckout, maxItemQty = 30 }) => {
+const CartPage = ({
+  items,
+  onIncrease,
+  onDecrease,
+  onRemove,
+  goToCatalog,
+  onCheckout,
+  onOpenProduct,
+  maxItemQty = 30,
+}) => {
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const totalCount = items.reduce((sum, item) => sum + item.qty, 0);
   const totalLabel = getItemsLabel(totalCount);
@@ -31,7 +40,19 @@ const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onChec
             <p className="cart-empty">Корзина пуста. Добавьте товары из каталога.</p>
           ) : (
             items.map((item) => (
-              <article className="cart-item" key={item.id}>
+              <article
+                className="cart-item"
+                key={item.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => onOpenProduct?.(item)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onOpenProduct?.(item);
+                  }
+                }}
+              >
                 <img className="cart-item-image" src={item.image} onError={() => {
                   console.error(`Failed to load image for item: ${item.title}`);
                 }} alt={item.title} />
@@ -45,7 +66,11 @@ const CartPage = ({ items, onIncrease, onDecrease, onRemove, goToCatalog, onChec
                     {item.isPending ? " • обновляем..." : ""}
                   </p>
 
-                  <div className="cart-item-controls">
+                  <div
+                    className="cart-item-controls"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
                     <div className="cart-qty-box">
                       <button
                         type="button"
