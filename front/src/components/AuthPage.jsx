@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { fetchCurrentUser, loginUser, registerUser } from "../api/publicApi";
 import { saveSession } from "../utils/authStorage";
 import "./AuthPage.css";
@@ -8,6 +8,8 @@ const initialSubmitState = {
   error: "",
   success: "",
 };
+const USERNAME_MAX_LENGTH = 50;
+const PASSWORD_MAX_LENGTH = 30;
 
 function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
   const [mode, setMode] = useState(initialMode);
@@ -21,6 +23,10 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
   });
   const [registerState, setRegisterState] = useState(initialSubmitState);
   const [loginState, setLoginState] = useState(initialSubmitState);
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
   const switchMode = (nextMode) => {
     setMode(nextMode);
@@ -63,7 +69,7 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
       await registerUser(registerForm);
       const loginPayload = await loginUser(registerForm);
       const user = await fetchCurrentUser(loginPayload.access_token);
-      saveSession({ user, token: loginPayload.access_token });
+      saveSession({ user });
       setRegisterForm({
         username: "",
         password: "",
@@ -74,7 +80,7 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
       });
       setRegisterState(initialSubmitState);
       setLoginState(initialSubmitState);
-      onAuthSuccess?.(user);
+      onAuthSuccess?.(user, loginPayload.access_token);
     } catch (error) {
       setRegisterState({
         isLoading: false,
@@ -105,7 +111,7 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
     try {
       const loginPayload = await loginUser(loginForm);
       const user = await fetchCurrentUser(loginPayload.access_token);
-      saveSession({ user, token: loginPayload.access_token });
+      saveSession({ user });
 
       setLoginState({
         isLoading: false,
@@ -113,7 +119,7 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
         success: "Вход выполнен успешно.",
       });
       setLoginForm((prev) => ({ ...prev, password: "" }));
-      onAuthSuccess?.(user);
+      onAuthSuccess?.(user, loginPayload.access_token);
     } catch (error) {
       setLoginState({
         isLoading: false,
@@ -161,8 +167,9 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
                   <input
                     type="text"
                     name="username"
-                    placeholder="Имя"
+                    placeholder="Имя Фамилия"
                     autoComplete="username"
+                    maxLength={USERNAME_MAX_LENGTH}
                     value={registerForm.username}
                     onChange={handleRegisterChange}
                     disabled={registerState.isLoading}
@@ -172,6 +179,7 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
                     name="password"
                     placeholder="Пароль"
                     autoComplete="new-password"
+                    maxLength={PASSWORD_MAX_LENGTH}
                     value={registerForm.password}
                     onChange={handleRegisterChange}
                     disabled={registerState.isLoading}
@@ -195,8 +203,9 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
                   <input
                     type="text"
                     name="username"
-                    placeholder="Имя"
+                    placeholder="Имя Фамилия"
                     autoComplete="username"
+                    maxLength={USERNAME_MAX_LENGTH}
                     value={loginForm.username}
                     onChange={handleLoginChange}
                     disabled={loginState.isLoading}
@@ -206,6 +215,7 @@ function AuthPage({ initialMode = "register", onBackHome, onAuthSuccess }) {
                     name="password"
                     placeholder="Пароль"
                     autoComplete="current-password"
+                    maxLength={PASSWORD_MAX_LENGTH}
                     value={loginForm.password}
                     onChange={handleLoginChange}
                     disabled={loginState.isLoading}

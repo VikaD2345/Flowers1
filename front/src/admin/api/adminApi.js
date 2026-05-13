@@ -1,4 +1,11 @@
-import { clearAdminToken, getAdminToken } from "../auth/adminAuthStorage";
+import {
+  clearAdminToken,
+  getAdminRefreshToken,
+  getAdminToken,
+  setAdminTokens,
+  updateAdminAccessToken,
+  updateAdminRefreshToken,
+} from "../auth/adminAuthStorage";
 
 const API_BASE =
   import.meta.env.VITE_API_URL?.toString().replace(/\/+$/, "") ??
@@ -16,28 +23,112 @@ async function readJsonSafely(res) {
   }
 }
 
-export async function adminFetch(path, { method = "GET", body, token } = {}) {
-  const authToken = token ?? getAdminToken();
+function formatValidationError(item) {
+  const field = Array.isArray(item?.loc) ? item.loc[item.loc.length - 1] : "";
+  const type = item?.type ?? "";
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const fieldLabel =
+    field === "username" ? "Логин" :
+    field === "password" ? "Пароль" :
+    "Поле";
+
+  if (type === "string_too_long") {
+    const maxLength = item?.ctx?.max_length;
+    return maxLength ? `${fieldLabel} должен быть не длиннее ${maxLength} символов.` : `${fieldLabel} слишком длинный.`;
+  }
+  if (type === "string_too_short") {
+    const minLength = item?.ctx?.min_length;
+    return minLength ? `${fieldLabel} должен быть не короче ${minLength} символов.` : `${fieldLabel} слишком короткий.`;
+  }
+  if (type === "missing") {
+    return `${fieldLabel} обязателен для заполнения.`;
+  }
+
+  return item?.msg ? `${fieldLabel}: ${item.msg}` : "Проверьте правильность заполнения формы.";
+}
+
+function getErrorMessage(payload, status) {
+  if (Array.isArray(payload?.detail)) {
+    return payload.detail.map(formatValidationError).join(" ");
+  }
+  if (typeof payload?.detail === "string") {
+    return payload.detail;
+  }
+  if (typeof payload?.message === "string") {
+    return payload.message;
+  }
+  return `Ошибка запроса. Код: ${status}`;
+}
+
+let adminRefreshPromise = null;
+
+async function doFetch(path, { method = "GET", body, token } = {}) {
+  return fetch(`${API_BASE}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+}
+
+async function refreshAdminAccessToken() {
+  if (adminRefreshPromise) {
+    return adminRefreshPromise;
+  }
+
+  const refreshToken = getAdminRefreshToken();
+  if (!refreshToken) {
+    clearAdminToken();
+    const err = new Error("Отсутствует refresh token администратора");
+    err.status = 401;
+    throw err;
+  }
+
+  adminRefreshPromise = (async () => {
+    const res = await doFetch("/auth/refresh", {
+      method: "POST",
+      body: { refresh_token: refreshToken },
+      token: null,
+    });
+    const payload = await readJsonSafely(res);
+
+    if (!res.ok) {
+      clearAdminToken();
+      throw await createRequestError(res, payload);
+    }
+
+    updateAdminAccessToken(payload?.access_token ?? "");
+    updateAdminRefreshToken(payload?.refresh_token ?? "");
+    return payload;
+  })();
+
+  try {
+    return await adminRefreshPromise;
+  } finally {
+    adminRefreshPromise = null;
+  }
+}
+
+export async function adminFetch(path, { method = "GET", body, token, requiresAuth = true, retry = true } = {}) {
+  const authToken = token === null ? null : getAdminToken() ?? token;
+
+  const res = await doFetch(path, { method, body, token: authToken });
 
   const payload = await readJsonSafely(res);
+
+  if (res.status === 401 && requiresAuth && retry) {
+    const refreshed = await refreshAdminAccessToken();
+    const retryToken = refreshed?.access_token ?? getAdminToken();
+    return adminFetch(path, { method, body, token: retryToken, requiresAuth, retry: false });
+  }
 
   if (!res.ok) {
     if (res.status === 401) {
       clearAdminToken();
     }
-    const detail =
-      payload?.detail ??
-      payload?.message ??
-      `Request failed with status ${res.status}`;
+    const detail = getErrorMessage(payload, res.status);
     const err = new Error(detail);
     err.status = res.status;
     err.payload = payload;
@@ -48,7 +139,19 @@ export async function adminFetch(path, { method = "GET", body, token } = {}) {
 }
 
 export async function adminLogin({ username, password }) {
-  return adminFetch("/auth/login", { method: "POST", body: { username, password }, token: null });
+  const payload = await adminFetch("/auth/login", {
+    method: "POST",
+    body: { username, password },
+    token: null,
+    requiresAuth: false,
+  });
+  if (payload?.access_token && payload?.refresh_token) {
+    setAdminTokens({
+      accessToken: payload.access_token,
+      refreshToken: payload.refresh_token,
+    });
+  }
+  return payload;
 }
 
 export async function adminMe() {

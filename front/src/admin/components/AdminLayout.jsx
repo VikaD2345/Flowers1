@@ -3,12 +3,12 @@ import "../admin.css";
 import { clearAdminToken } from "../auth/adminAuthStorage";
 
 const navItems = [
-  { to: "/admin/dashboard", label: "Dashboard" },
-  { to: "/admin/orders", label: "Orders" },
-  { to: "/admin/products", label: "Products" },
-  { to: "/admin/forecast", label: "Forecast" },
-  { to: "/admin/users", label: "Users" },
-  { to: "/admin/audit", label: "Audit" },
+  { to: "/admin/dashboard", label: "Панель" },
+  { to: "/admin/orders", label: "Заказы" },
+  { to: "/admin/products", label: "Товары" },
+  { to: "/admin/forecast", label: "Прогноз" },
+  { to: "/admin/users", label: "Пользователи" },
+  { to: "/admin/audit", label: "Аудит" },
 ];
 
 export function AdminLayout() {
@@ -17,7 +17,7 @@ export function AdminLayout() {
 
   const title =
     navItems.find((item) => location.pathname.startsWith(item.to))?.label ??
-    "Admin";
+    "Админка";
 
   return (
     <div className="adminShell">
@@ -25,12 +25,12 @@ export function AdminLayout() {
         <div className="adminBrand">
           <div className="adminBrandMark" aria-hidden="true" />
           <div className="adminBrandText">
-            <div className="adminBrandTitle">Flowers Admin</div>
-            <div className="adminBrandSubtitle">Demo-ready console</div>
+            <div className="adminBrandTitle">Админка Flowers</div>
+            <div className="adminBrandSubtitle">Панель управления магазином</div>
           </div>
         </div>
 
-        <nav className="adminNav" aria-label="Admin navigation">
+        <nav className="adminNav" aria-label="Навигация админки">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -49,7 +49,7 @@ export function AdminLayout() {
             className="adminBtn"
             onClick={() => navigate("/")}
           >
-            Back to site
+            На сайт
           </button>
         </div>
       </aside>
@@ -66,7 +66,7 @@ export function AdminLayout() {
                 navigate("/admin/login");
               }}
             >
-              Logout
+              Выйти
             </button>
           </div>
         </header>

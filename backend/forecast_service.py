@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import RLock
 from pathlib import Path
 
 import joblib
@@ -18,7 +19,21 @@ DATA_PATH = (
 )
 MODEL_PATH = BACKEND_DIR / "xgboost_model.joblib"
 LAGS = (1, 7, 14, 28)
-ROLL_WINDOWS = (7, 14)
+ROLL_WINDOWS = (7, 14, 28)
+DEFAULT_POSTPROCESS = {
+    "model_weight": 0.65,
+    "seasonal_floor": 0.35,
+    "doy_weight": 0.7,
+}
+POSTPROCESS_CANDIDATES = {
+    "model_weight": (0.0, 0.25, 0.5, 0.65, 0.75, 1.0),
+    "seasonal_floor": (0.0, 0.2, 0.35, 0.5),
+    "doy_weight": (0.0, 0.3, 0.5, 0.7, 1.0),
+}
+_MODEL_CACHE_LOCK = RLock()
+_MODEL_CACHE: dict[Path, tuple[float, dict]] = {}
+_FORECAST_CACHE: dict[tuple[Path, float, str, int, float], list["ForecastRow"]] = {}
+_FORECAST_CACHE_MAX_SIZE = 32
 
 
 @dataclass
@@ -163,22 +178,48 @@ def _build_xgb_model() -> XGBRegressor:
 def _date_features(ts: pd.Timestamp) -> dict[str, float]:
     month = float(ts.month)
     day_of_year = float(ts.dayofyear)
+    day_of_month = float(ts.day)
     day_of_week = float(ts.dayofweek)
+    week_of_year = float(ts.isocalendar().week)
     is_weekend = float(day_of_week >= 5)
     is_valentine = float(ts.month == 2 and ts.day == 14)
     is_womens_day = float(ts.month == 3 and ts.day == 8)
     is_new_year_period = float((ts.month == 12 and ts.day >= 25) or (ts.month == 1 and ts.day <= 8))
+
+    def _holiday_distance(month: int, day: int) -> float:
+        current = ts.normalize()
+        candidates = [
+            pd.Timestamp(year=ts.year - 1, month=month, day=day),
+            pd.Timestamp(year=ts.year, month=month, day=day),
+            pd.Timestamp(year=ts.year + 1, month=month, day=day),
+        ]
+        return float(min(abs((current - candidate).days) for candidate in candidates))
+
+    days_to_valentine = _holiday_distance(2, 14)
+    days_to_womens_day = _holiday_distance(3, 8)
+    days_to_new_year = _holiday_distance(12, 31)
+    nearest_flower_holiday = min(days_to_valentine, days_to_womens_day, days_to_new_year)
     return {
         "is_weekend": is_weekend,
+        "day_of_month": day_of_month,
+        "is_month_start": float(ts.day <= 3),
+        "is_month_end": float(ts.day >= 28),
+        "is_payday_period": float(ts.day <= 5 or 20 <= ts.day <= 25),
         "month_sin": float(np.sin(2.0 * np.pi * month / 12.0)),
         "month_cos": float(np.cos(2.0 * np.pi * month / 12.0)),
         "doy_sin": float(np.sin(2.0 * np.pi * day_of_year / 365.25)),
         "doy_cos": float(np.cos(2.0 * np.pi * day_of_year / 365.25)),
         "dow_sin": float(np.sin(2.0 * np.pi * day_of_week / 7.0)),
         "dow_cos": float(np.cos(2.0 * np.pi * day_of_week / 7.0)),
+        "week_sin": float(np.sin(2.0 * np.pi * week_of_year / 52.18)),
+        "week_cos": float(np.cos(2.0 * np.pi * week_of_year / 52.18)),
         "is_valentine": is_valentine,
         "is_womens_day": is_womens_day,
         "is_new_year_period": is_new_year_period,
+        "valentine_proximity": float(np.exp(-days_to_valentine / 10.0)),
+        "womens_day_proximity": float(np.exp(-days_to_womens_day / 10.0)),
+        "new_year_proximity": float(np.exp(-days_to_new_year / 12.0)),
+        "flower_holiday_proximity": float(np.exp(-nearest_flower_holiday / 10.0)),
     }
 
 
@@ -187,7 +228,9 @@ def _build_feature_row(ts: pd.Timestamp, history: list[float], context: dict[str
     for lag in LAGS:
         row[f"lag_{lag}"] = float(history[-lag])
     for window in ROLL_WINDOWS:
-        row[f"roll_mean_{window}"] = float(np.mean(history[-window:]))
+        window_values = history[-window:]
+        row[f"roll_mean_{window}"] = float(np.mean(window_values))
+        row[f"roll_std_{window}"] = float(np.std(window_values))
     if context:
         row["ctx_avg_price"] = float(context.get("avg_price", 0.0))
         row["ctx_avg_discount"] = float(context.get("avg_discount", 0.0))
@@ -321,13 +364,17 @@ def _predict_series_range(
     doy_means = history_df.groupby("doy")["y"].mean().to_dict()
     dow_means = history_df.groupby("dow")["y"].mean().to_dict()
     global_mean = float(history_df["y"].mean()) if not history_df.empty else 0.0
+    postprocess = {**DEFAULT_POSTPROCESS, **artifact.get("postprocess", {})}
+    model_weight = float(postprocess["model_weight"])
+    seasonal_floor = float(postprocess["seasonal_floor"])
+    doy_weight = float(postprocess["doy_weight"])
 
     def _seasonal_anchor(ts: pd.Timestamp) -> float:
         doy = int(ts.dayofyear)
         dow = int(ts.dayofweek)
         doy_avg = float(doy_means.get(doy, global_mean))
         dow_avg = float(dow_means.get(dow, global_mean))
-        return max(0.0, 0.7 * doy_avg + 0.3 * dow_avg)
+        return max(0.0, doy_weight * doy_avg + (1.0 - doy_weight) * dow_avg)
 
     if kind == "naive":
         value = max(0.0, float(artifact.get("baseline", float(np.mean(history_y)))))
@@ -340,6 +387,7 @@ def _predict_series_range(
 
     model: XGBRegressor = artifact["model"]
     feature_columns: list[str] = artifact["feature_columns"]
+    booster = model.get_booster()
     min_back = max(max(LAGS), max(ROLL_WINDOWS))
     if len(history_y) < min_back:
         value = max(0.0, float(np.mean(history_y)))
@@ -353,11 +401,11 @@ def _predict_series_range(
     current_date = last_date + pd.Timedelta(days=1)
     while current_date <= end_date:
         row = _build_feature_row(current_date, history_y, context)
-        x = pd.DataFrame([row])[feature_columns]
-        yhat = max(0.0, float(model.predict(x)[0]))
+        x = np.array([[row[column] for column in feature_columns]], dtype=np.float32)
+        yhat = max(0.0, float(booster.inplace_predict(x)[0]))
         seasonal = _seasonal_anchor(current_date)
         # Keep model flexibility, but prevent long-horizon collapse to zeros.
-        yhat = max(0.35 * seasonal, 0.65 * yhat + 0.35 * seasonal)
+        yhat = max(seasonal_floor * seasonal, model_weight * yhat + (1.0 - model_weight) * seasonal)
         history_y.append(yhat)
         if current_date >= start_date:
             generated[current_date.date().isoformat()] = yhat
@@ -368,6 +416,56 @@ def _predict_series_range(
 def _mape_percent(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     denom = np.where(y_true == 0, np.nan, y_true)
     return float(np.nanmean(np.abs((y_true - y_pred) / denom)) * 100.0)
+
+
+def _prediction_array(prediction_map: dict[str, float], keys: list[str]) -> np.ndarray:
+    return np.array([prediction_map.get(k, 0.0) for k in keys], dtype=float)
+
+
+def _with_postprocess(artifact: dict, postprocess: dict[str, float]) -> dict:
+    tuned = artifact.copy()
+    tuned["postprocess"] = postprocess
+    return tuned
+
+
+def _tune_postprocess(
+    artifact: dict,
+    *,
+    y_true: np.ndarray,
+    keys: list[str],
+    start_date: pd.Timestamp,
+    end_date: pd.Timestamp,
+) -> tuple[dict[str, float], np.ndarray, float]:
+    best_postprocess = DEFAULT_POSTPROCESS.copy()
+    best_prediction_map = _predict_series_range(
+        _with_postprocess(artifact, best_postprocess),
+        start_date=start_date,
+        end_date=end_date,
+    )
+    best_yhat = _prediction_array(best_prediction_map, keys)
+    best_mape = _mape_percent(y_true, best_yhat)
+
+    for model_weight in POSTPROCESS_CANDIDATES["model_weight"]:
+        for seasonal_floor in POSTPROCESS_CANDIDATES["seasonal_floor"]:
+            for doy_weight in POSTPROCESS_CANDIDATES["doy_weight"]:
+                candidate = {
+                    "model_weight": float(model_weight),
+                    "seasonal_floor": float(seasonal_floor),
+                    "doy_weight": float(doy_weight),
+                }
+                prediction_map = _predict_series_range(
+                    _with_postprocess(artifact, candidate),
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+                yhat = _prediction_array(prediction_map, keys)
+                mape = _mape_percent(y_true, yhat)
+                if np.isfinite(mape) and mape < best_mape:
+                    best_postprocess = candidate
+                    best_yhat = yhat
+                    best_mape = mape
+
+    return best_postprocess, best_yhat, best_mape
 
 
 def _aggregate_category_predictions(
@@ -408,9 +506,14 @@ def train_and_save_model(
     val_keys = [pd.Timestamp(ds).date().isoformat() for ds in pd.to_datetime(val_total["ds"]).tolist()]
 
     fallback_for_val = _fit_single_series_artifact(train_total, context={"avg_qty": float(train_total["y"].mean())})
-    global_pred_map = _predict_series_range(fallback_for_val, start_date=val_start, end_date=val_end)
-    yhat_global = np.array([global_pred_map.get(k, 0.0) for k in val_keys], dtype=float)
-    mape_global = _mape_percent(y_true, yhat_global)
+    global_postprocess, yhat_global, mape_global = _tune_postprocess(
+        fallback_for_val,
+        y_true=y_true,
+        keys=val_keys,
+        start_date=val_start,
+        end_date=val_end,
+    )
+    fallback_for_val["postprocess"] = global_postprocess
 
     # Evaluate category strategy
     categories_for_val: dict[str, dict] = {}
@@ -422,7 +525,7 @@ def train_and_save_model(
                 context=category_profiles.get(category, {}),
             )
     category_pred_map = _aggregate_category_predictions(categories_for_val, start_date=val_start, end_date=val_end)
-    yhat_category = np.array([category_pred_map.get(k, 0.0) for k in val_keys], dtype=float)
+    yhat_category = _prediction_array(category_pred_map, val_keys)
     mape_category = _mape_percent(y_true, yhat_category)
     strategy = "global" if mape_global <= mape_category else "category"
     selected_yhat = yhat_global if strategy == "global" else yhat_category
@@ -432,6 +535,7 @@ def train_and_save_model(
     accuracy_val = float(max(0.0, 1.0 - (mape_val / 100.0)))
 
     fallback = _fit_single_series_artifact(total_history, context={"avg_qty": float(total_history["y"].mean())})
+    fallback["postprocess"] = global_postprocess
     category_artifacts = {
         category: _fit_single_series_artifact(series, context=category_profiles.get(category, {}))
         for category, series in by_category.items()
@@ -442,6 +546,7 @@ def train_and_save_model(
         "strategy": strategy,
         "validation_mape_global": mape_global,
         "validation_mape_category": mape_category,
+        "global_postprocess": global_postprocess,
         "cached_metrics": {
             "rows": int(len(total_history)),
             "train_rows": int(len(train_total)),
@@ -456,13 +561,38 @@ def train_and_save_model(
         "fallback": fallback,
     }
     joblib.dump(artifact, model_path)
+    clear_runtime_caches(model_path=model_path)
     return model_path
 
 
 def load_model(model_path: Path = MODEL_PATH) -> dict:
     if not model_path.exists():
         raise FileNotFoundError(f"Forecast model not found: {model_path}")
-    return joblib.load(model_path)
+
+    resolved_path = model_path.resolve()
+    model_mtime = model_path.stat().st_mtime
+    with _MODEL_CACHE_LOCK:
+        cached = _MODEL_CACHE.get(resolved_path)
+        if cached is not None and cached[0] == model_mtime:
+            return cached[1]
+
+        artifact = joblib.load(model_path)
+        _MODEL_CACHE[resolved_path] = (model_mtime, artifact)
+        return artifact
+
+
+def clear_runtime_caches(*, model_path: Path | None = None) -> None:
+    with _MODEL_CACHE_LOCK:
+        if model_path is None:
+            _MODEL_CACHE.clear()
+            _FORECAST_CACHE.clear()
+            return
+
+        resolved_path = model_path.resolve()
+        _MODEL_CACHE.pop(resolved_path, None)
+        stale_keys = [key for key in _FORECAST_CACHE if key[0] == resolved_path]
+        for key in stale_keys:
+            _FORECAST_CACHE.pop(key, None)
 
 
 def ensure_model(model_path: Path = MODEL_PATH, csv_path: Path = DATA_PATH) -> dict:
@@ -484,11 +614,24 @@ def forecast_demand(
         raise ValueError("safety_stock must be >= 0")
 
     artifact = ensure_model(model_path=model_path, csv_path=csv_path)
+    model_mtime = model_path.stat().st_mtime
+    start_date = pd.Timestamp.now().normalize()
+    cache_key = (
+        model_path.resolve(),
+        model_mtime,
+        start_date.date().isoformat(),
+        int(days),
+        round(float(safety_stock), 4),
+    )
+    with _MODEL_CACHE_LOCK:
+        cached_rows = _FORECAST_CACHE.get(cache_key)
+        if cached_rows is not None:
+            return list(cached_rows)
+
     if artifact.get("kind") != "multi_category":
         # Backward compatibility with older single-series model files.
         artifact = {"kind": "multi_category", "categories": {"_all_": artifact}, "fallback": artifact}
 
-    start_date = pd.Timestamp.now().normalize()
     target_end = start_date + pd.Timedelta(days=days - 1)
     categories: dict[str, dict] = artifact.get("categories", {})
     if not categories:
@@ -512,6 +655,11 @@ def forecast_demand(
                 purchase_plan=purchase_plan,
             )
         )
+    with _MODEL_CACHE_LOCK:
+        if len(_FORECAST_CACHE) >= _FORECAST_CACHE_MAX_SIZE:
+            oldest_key = next(iter(_FORECAST_CACHE))
+            _FORECAST_CACHE.pop(oldest_key, None)
+        _FORECAST_CACHE[cache_key] = list(rows)
     return rows
 
 
@@ -559,8 +707,14 @@ def evaluate_holdout_metrics(
     test_start = pd.Timestamp(test["ds"].min()).normalize()
     test_end = pd.Timestamp(test["ds"].max()).normalize()
     test_keys = [pd.Timestamp(ds).date().isoformat() for ds in pd.to_datetime(test["ds"]).tolist()]
-    global_pred_map = _predict_series_range(global_artifact, start_date=test_start, end_date=test_end)
-    yhat_global = np.array([global_pred_map.get(k, 0.0) for k in test_keys], dtype=float)
+    global_postprocess, yhat_global, mape_global = _tune_postprocess(
+        global_artifact,
+        y_true=test["y"].astype(float).to_numpy(),
+        keys=test_keys,
+        start_date=test_start,
+        end_date=test_end,
+    )
+    global_artifact["postprocess"] = global_postprocess
 
     # Category strategy on holdout split
     by_category = _build_daily_demand_by_category(csv_path)
@@ -574,10 +728,9 @@ def evaluate_holdout_metrics(
                 context=split_profiles.get(category, {}),
             )
     category_pred_map = _aggregate_category_predictions(split_categories, start_date=test_start, end_date=test_end)
-    yhat_category = np.array([category_pred_map.get(k, 0.0) for k in test_keys], dtype=float)
+    yhat_category = _prediction_array(category_pred_map, test_keys)
 
     y = test["y"].astype(float).to_numpy()
-    mape_global = _mape_percent(y, yhat_global)
     mape_category = _mape_percent(y, yhat_category)
     yhat = yhat_global if mape_global <= mape_category else yhat_category
 

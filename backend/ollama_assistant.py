@@ -18,20 +18,57 @@ OLLAMA_REPLY_MODEL = os.getenv("OLLAMA_REPLY_MODEL", OLLAMA_MODEL)
 OLLAMA_EXTRACTION_MODEL = os.getenv("OLLAMA_EXTRACTION_MODEL", OLLAMA_REPLY_MODEL)
 OLLAMA_EXTRACT_WITH_LLM = os.getenv("OLLAMA_EXTRACT_WITH_LLM", "true").lower() == "true"
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "45"))
+OLLAMA_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "260"))
 
 DEFAULT_BUDGET_QUESTION = "Подскажите, пожалуйста, в каком бюджете подобрать варианты?"
+UNKNOWN_FLOWER_REQUEST_REPLY = (
+    "Не понял ваш запрос. Я могу помочь подобрать букет: напишите, для кого он, "
+    "на какой повод и в каком бюджете."
+)
 
 STYLE_KEYWORDS: dict[str, list[str]] = {
-    "нежный": ["нежн", "роз", "pink", "white", "бел", "пион", "тюльпан", "роман"],
-    "романтичный": ["роман", "роз", "red", "крас", "пион", "серд"],
-    "яркий": ["ярк", "red", "крас", "orange", "оранж", "сад", "микс"],
-    "классический": ["white", "бел", "роз", "classic", "класс"],
+    "нежный": ["нежн", "мягк", "пастел", "спокойн", "роз", "pink", "white", "бел", "пион", "тюльпан", "роман"],
+    "романтичный": ["роман", "любим", "свидан", "роз", "red", "крас", "пион", "серд"],
+    "яркий": ["ярк", "сочн", "насыщ", "red", "крас", "orange", "оранж", "yellow", "желт", "сад", "микс"],
+    "классический": ["white", "бел", "роз", "classic", "класс", "строг", "универс"],
+    "полевой": ["полев", "садов", "ромаш", "зелень", "естествен", "натуральн"],
+    "премиальный": ["премиум", "роскош", "люкс", "дорог", "статус", "больш"],
 }
 
 RECIPIENT_KEYWORDS: dict[str, list[str]] = {
     "девушке": ["нежн", "роман", "роз", "пион", "тюльпан", "pink", "бел"],
-    "маме": ["класс", "бел", "сад", "лилия", "хриз"],
-    "коллеге": ["класс", "микс", "white", "бел"],
+    "жене": ["роман", "роз", "крас", "пион", "нежн", "премиум"],
+    "маме": ["класс", "нежн", "бел", "сад", "лилия", "хриз", "тепл"],
+    "коллеге": ["класс", "микс", "white", "бел", "строг", "универс"],
+    "учителю": ["класс", "светл", "универс", "хриз", "тюльпан"],
+    "подруге": ["ярк", "микс", "нежн", "роз", "тюльпан"],
+}
+
+STYLE_ALIASES: dict[str, list[str]] = {
+    "нежный": ["нежн", "пастел", "мягк", "спокойн", "светл", "розов", "бел"],
+    "романтичный": ["роман", "любим", "свидан", "14 февраля", "валентин"],
+    "яркий": ["ярк", "поярч", "сочн", "насыщ", "красоч", "оранж", "желт"],
+    "классический": ["класс", "строг", "универс", "элегант", "лаконич"],
+    "полевой": ["полев", "садов", "естествен", "натуральн"],
+    "премиальный": ["премиум", "роскош", "люкс", "дорог", "статус", "большой"],
+}
+
+RECIPIENT_ALIASES: dict[str, list[str]] = {
+    "девушке": ["девуш", "любимой", "любимую"],
+    "жене": ["жене", "супруге"],
+    "маме": ["маме", "мамы", "мамочке", "матери"],
+    "коллеге": ["коллег", "начальниц", "начальнику", "руководител"],
+    "учителю": ["учител", "преподавател", "педагог"],
+    "подруге": ["подруг"],
+}
+
+OCCASION_KEYWORDS: dict[str, list[str]] = {
+    "день рождения": ["день рожден", "др", "юбилей", "поздрав"],
+    "свидание": ["свидан", "роман", "встреч"],
+    "8 марта": ["8 марта", "восьмое марта", "женский день"],
+    "извинение": ["извин", "прост", "помир"],
+    "свадьба": ["свадь", "невест", "годовщин"],
+    "без повода": ["без повода", "просто так"],
 }
 
 
@@ -201,6 +238,24 @@ def _detect_intents(messages: list[Any]) -> dict[str, bool]:
     }
 
 
+def _find_by_aliases(text: str, aliases: dict[str, list[str]]) -> str | None:
+    lowered = _normalize_text(text)
+    for canonical, variants in aliases.items():
+        if canonical in lowered or any(variant in lowered for variant in variants):
+            return canonical
+    return None
+
+
+def _keywords_for(value: str | None, mapping: dict[str, list[str]]) -> list[str]:
+    if not value:
+        return []
+    normalized = _normalize_text(value)
+    keywords = list(mapping.get(normalized, []))
+    if normalized and normalized not in keywords:
+        keywords.append(normalized)
+    return keywords
+
+
 def is_smalltalk_message(messages: list[Any]) -> bool:
     last_user_text = _normalize_text(_last_user_message(messages))
     if not last_user_text:
@@ -216,6 +271,29 @@ def is_smalltalk_message(messages: list[Any]) -> bool:
         for marker in ["букет", "цвет", "роз", "тюльпан", "хризант", "пион", "маме", "девуш", "жене", "коллеге"]
     )
     return any(marker in last_user_text for marker in smalltalk_markers) and not has_request_markers
+
+
+def is_flower_request(messages: list[Any]) -> bool:
+    conversation = _normalize_text(" ".join(_message_attr(message, "content") for message in messages[-4:]))
+    last_user_text = _normalize_text(_last_user_message(messages))
+    text = last_user_text or conversation
+    if not text:
+        return False
+
+    direct_markers = [
+        "букет", "цвет", "цветы", "роза", "розы", "тюльпан", "пион", "лилия", "хризант", "ромаш",
+        "флорист", "композиция", "подарок", "доставка цветов",
+    ]
+    if any(marker in text for marker in direct_markers):
+        return True
+
+    has_recipient = _find_by_aliases(text, RECIPIENT_ALIASES) is not None
+    has_style = _find_by_aliases(text, STYLE_ALIASES) is not None
+    has_occasion = _find_by_aliases(text, OCCASION_KEYWORDS) is not None
+    budget_text, budget_min, budget_max = _extract_budget_range(text)
+    has_budget = budget_text is not None or budget_min is not None or budget_max is not None
+
+    return sum([has_recipient, has_style, has_occasion, has_budget]) >= 2
 
 
 def build_smalltalk_reply(messages: list[Any]) -> str:
@@ -236,7 +314,7 @@ def _call_ollama(*, messages: list[dict[str, str]], model: str, json_mode: bool 
         "model": model,
         "messages": messages,
         "stream": False,
-        "options": {"temperature": temperature},
+        "options": {"temperature": temperature, "num_predict": OLLAMA_NUM_PREDICT},
     }
     if json_mode:
         payload["format"] = "json"
@@ -264,7 +342,7 @@ def _stream_ollama(*, messages: list[dict[str, str]], model: str, temperature: f
         "model": model,
         "messages": messages,
         "stream": True,
-        "options": {"temperature": temperature},
+        "options": {"temperature": temperature, "num_predict": OLLAMA_NUM_PREDICT},
     }
     req = urllib_request.Request(
         f"{OLLAMA_BASE_URL}/api/chat",
@@ -297,12 +375,14 @@ def extract_criteria(messages: list[Any]) -> dict[str, Any]:
     lowered = _normalize_text(conversation)
     intents = _detect_intents(messages)
 
-    style = next((candidate for candidate in STYLE_KEYWORDS if candidate in lowered), None)
-    recipient = next((candidate for candidate in RECIPIENT_KEYWORDS if candidate in lowered), None)
+    style = _find_by_aliases(lowered, STYLE_ALIASES) or next((candidate for candidate in STYLE_KEYWORDS if candidate in lowered), None)
+    recipient = _find_by_aliases(lowered, RECIPIENT_ALIASES) or next((candidate for candidate in RECIPIENT_KEYWORDS if candidate in lowered), None)
+    occasion = _find_by_aliases(lowered, OCCASION_KEYWORDS)
     budget_text, budget_min, budget_max = _extract_budget_range(last_user_text or conversation)
     fallback = {
         "style": style,
         "recipient": recipient,
+        "occasion": occasion,
         "budget_text": budget_text,
         "budget_min": budget_min,
         "budget_max": budget_max,
@@ -314,7 +394,10 @@ def extract_criteria(messages: list[Any]) -> dict[str, Any]:
     if not OLLAMA_EXTRACT_WITH_LLM:
         return fallback
 
-    has_enough_signal = bool((fallback.get("budget_max") is not None or fallback.get("budget_min") is not None) and (fallback.get("style") or fallback.get("recipient")))
+    has_enough_signal = bool(
+        (fallback.get("budget_max") is not None or fallback.get("budget_min") is not None)
+        and (fallback.get("style") or fallback.get("recipient") or fallback.get("occasion"))
+    )
     if has_enough_signal:
         return fallback
 
@@ -344,6 +427,7 @@ def extract_criteria(messages: list[Any]) -> dict[str, Any]:
     return {
         "style": parsed.get("style") or fallback.get("style"),
         "recipient": parsed.get("recipient") or fallback.get("recipient"),
+        "occasion": parsed.get("occasion") or fallback.get("occasion"),
         "budget_text": fallback.get("budget_text") or parsed.get("budget_text"),
         "budget_min": fallback.get("budget_min") if fallback.get("budget_min") is not None else budget_min,
         "budget_max": fallback.get("budget_max") if fallback.get("budget_max") is not None else budget_max,
@@ -398,12 +482,22 @@ def _choose_diverse_products(ranked: list[tuple[float, FlowerModel]], *, limit: 
     return selected[:target_limit]
 
 
-def _match_reason(*, style: str | None, recipient: str | None, budget_min: float | None, budget_max: float | None, price: float) -> str:
+def _match_reason(
+    *,
+    style: str | None,
+    recipient: str | None,
+    occasion: str | None,
+    budget_min: float | None,
+    budget_max: float | None,
+    price: float,
+) -> str:
     parts: list[str] = []
     if style:
         parts.append(f"подходит по стилю: {style}")
     if recipient:
         parts.append(f"уместно для: {recipient}")
+    if occasion:
+        parts.append(f"подходит на повод: {occasion}")
     in_min = budget_min is None or price >= budget_min
     in_max = budget_max is None or price <= budget_max
     if in_min and in_max and (budget_min is not None or budget_max is not None):
@@ -421,6 +515,7 @@ def search_products(
     search_summary: str,
     style: str | None,
     recipient: str | None,
+    occasion: str | None,
     budget_min: float | None,
     budget_max: float | None,
     intents: dict[str, bool] | None,
@@ -432,8 +527,9 @@ def search_products(
 
     intents = intents or {}
     candidates: list[tuple[float, FlowerModel]] = []
-    style_keywords = STYLE_KEYWORDS.get(_normalize_text(style), [])
-    recipient_keywords = RECIPIENT_KEYWORDS.get(_normalize_text(recipient), [])
+    style_keywords = _keywords_for(style, STYLE_KEYWORDS)
+    recipient_keywords = _keywords_for(recipient, RECIPIENT_KEYWORDS)
+    occasion_keywords = _keywords_for(occasion, OCCASION_KEYWORDS)
     query_tokens = _tokenize_search_text(search_summary)
     compare_mode = bool(intents.get("compare"))
     cheaper_mode = bool(intents.get("cheaper"))
@@ -452,6 +548,9 @@ def search_products(
         score += _score_keyword_hits(name_text, recipient_keywords, 3.5)
         score += _score_keyword_hits(category_text, recipient_keywords, 2.0)
         score += _score_keyword_hits(description_text, recipient_keywords, 2.0)
+        score += _score_keyword_hits(name_text, occasion_keywords, 3.0)
+        score += _score_keyword_hits(category_text, occasion_keywords, 2.2)
+        score += _score_keyword_hits(description_text, occasion_keywords, 2.2)
 
         for token in query_tokens:
             if token in name_text:
@@ -514,6 +613,7 @@ def search_products(
             "match_reason": _match_reason(
                 style=style,
                 recipient=recipient,
+                occasion=occasion,
                 budget_min=budget_min,
                 budget_max=budget_max,
                 price=float(row.price),
@@ -529,11 +629,14 @@ def build_grounded_assistant_reply(*, criteria: dict[str, Any], products: list[d
 
     style = criteria.get("style")
     recipient = criteria.get("recipient")
+    occasion = criteria.get("occasion")
     budget_min = criteria.get("budget_min")
     budget_max = criteria.get("budget_max")
     intro_parts: list[str] = []
     if recipient:
         intro_parts.append(f"для {recipient}")
+    if occasion:
+        intro_parts.append(f"на {occasion}")
     if style:
         intro_parts.append(f"в стиле \"{style}\"")
     if budget_min is not None and budget_max is not None:
@@ -576,6 +679,48 @@ def _reply_looks_unreliable(reply: str, *, budget_max: float | None) -> bool:
     if "не могу" in normalized and "однако" in normalized:
         return True
     return False
+
+
+def _build_consultant_prompt(
+    *,
+    messages: list[Any],
+    criteria: dict[str, Any],
+    products: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    criteria_payload = {
+        "style": criteria.get("style"),
+        "recipient": criteria.get("recipient"),
+        "occasion": criteria.get("occasion"),
+        "budget_text": criteria.get("budget_text"),
+        "budget_min": criteria.get("budget_min"),
+        "budget_max": criteria.get("budget_max"),
+    }
+    products_payload = [
+        {
+            "name": product.get("name"),
+            "category": product.get("category"),
+            "price": product.get("price"),
+            "description": product.get("description"),
+            "match_reason": product.get("match_reason"),
+        }
+        for product in products[:3]
+    ]
+    user_payload = {
+        "criteria": criteria_payload,
+        "products": products_payload,
+        "dialog": _serialize_messages(messages)[-6:],
+    }
+    return [
+        {"role": "system", "content": RECOMMENDATION_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                "Сформируй ответ консультанта по этим данным. "
+                "Не добавляй товары вне списка.\n"
+                f"{json.dumps(user_payload, ensure_ascii=False)}"
+            ),
+        },
+    ]
 
 
 def build_assistant_reply(*, messages: list[Any], criteria: dict[str, Any], products: list[dict[str, Any]]) -> str:

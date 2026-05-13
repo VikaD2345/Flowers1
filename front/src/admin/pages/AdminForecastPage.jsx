@@ -256,7 +256,7 @@ export function AdminForecastPage() {
               <strong>{formatPercent(metrics.mape_percent)}</strong>
             </div>
             <div className="adminStatsRow">
-              <span>Accuracy</span>
+              <span>Точность</span>
               <strong>{formatPercent(metrics.accuracy)}</strong>
             </div>
           </div>

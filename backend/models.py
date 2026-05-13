@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from typing import Optional
 
 from sqlalchemy import (
     DateTime,
@@ -44,6 +45,24 @@ class UserModel(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     orders: Mapped[list[OrderModel]] = relationship(back_populates="user")
+    refresh_tokens: Mapped[list[RefreshTokenModel]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class RefreshTokenModel(Base):
+    __tablename__ = "app_refresh_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("app_users.id"), index=True, nullable=False)
+    jti: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    replaced_by_jti: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    user: Mapped[UserModel] = relationship(back_populates="refresh_tokens")
 
 
 class FlowerModel(Base):
@@ -114,16 +133,18 @@ class AuditLogModel(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("app_users.id"), index=True, nullable=True)
+    actor_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("app_users.id"), index=True, nullable=True
+    )
     actor_username: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     action: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     entity: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
-    entity_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    entity_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
 
-    before: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    after: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    before: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    after: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
 
-    actor: Mapped[UserModel | None] = relationship()
+    actor: Mapped[Optional[UserModel]] = relationship()

@@ -19,7 +19,7 @@ export function AdminUsersPage() {
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(err?.message ?? "Failed to load users.");
+        setError(err?.message ?? "Не удалось загрузить пользователей.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -31,20 +31,20 @@ export function AdminUsersPage() {
   }, []);
 
   const onDelete = async (user) => {
-    const ok = window.confirm(`Delete user "${user.username}"?`);
+    const ok = window.confirm(`Удалить пользователя "${user.username}"?`);
     if (!ok) return;
     setError(null);
     try {
       await adminDeleteUser(user.id);
       setUsers((prev) => prev.filter((u) => u.id !== user.id));
     } catch (err) {
-      setError(err?.message ?? "Failed to delete user.");
+      setError(err?.message ?? "Не удалось удалить пользователя.");
     }
   };
 
   const onDeleteAll = async () => {
     const ok = window.confirm(
-      "Delete all users except the current admin? Their carts and orders will be removed too."
+      "Удалить всех пользователей, кроме текущего администратора? Их корзины и заказы тоже будут удалены."
     );
     if (!ok) return;
 
@@ -55,7 +55,7 @@ export function AdminUsersPage() {
       const rows = await adminListUsers();
       setUsers(Array.isArray(rows) ? rows : []);
     } catch (err) {
-      setError(err?.message ?? "Failed to delete all users.");
+      setError(err?.message ?? "Не удалось удалить всех пользователей.");
     } finally {
       setIsDeletingAll(false);
     }
@@ -66,9 +66,9 @@ export function AdminUsersPage() {
       <div className="adminCard adminCol12">
         <div style={{ display: "flex", gap: 12, alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 18 }}>Users</div>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>Пользователи</div>
             <div style={{ color: "rgba(255,255,255,0.68)", marginTop: 4 }}>
-              View and manage accounts.
+              Просматривайте аккаунты и управляйте ими.
             </div>
           </div>
           <button
@@ -77,13 +77,13 @@ export function AdminUsersPage() {
             onClick={onDeleteAll}
             disabled={isLoading || isDeletingAll}
           >
-            {isDeletingAll ? "Deleting..." : "Delete all users"}
+            {isDeletingAll ? "Удаляем..." : "Удалить всех пользователей"}
           </button>
         </div>
 
         {error ? (
           <div style={{ marginTop: 12 }}>
-            <span className="adminBadge adminBadgeDanger">Error</span>{" "}
+            <span className="adminBadge adminBadgeDanger">Ошибка</span>{" "}
             <span style={{ color: "rgba(255,255,255,0.78)" }}>{error}</span>
           </div>
         ) : null}
@@ -91,17 +91,17 @@ export function AdminUsersPage() {
         <div style={{ marginTop: 14, overflowX: "auto" }}>
           {isLoading ? (
             <div style={{ color: "rgba(255,255,255,0.72)", padding: 8 }}>
-              Loading...
+              Загрузка...
             </div>
           ) : (
-            <table className="adminTable" aria-label="Users table">
+            <table className="adminTable" aria-label="Таблица пользователей">
               <thead>
                 <tr>
                   <th style={{ width: 90 }}>ID</th>
-                  <th>Username</th>
-                  <th style={{ width: 140 }}>Role</th>
-                  <th style={{ width: 200 }}>Created</th>
-                  <th style={{ width: 160 }}>Actions</th>
+                  <th>Логин</th>
+                  <th style={{ width: 140 }}>Роль</th>
+                  <th style={{ width: 200 }}>Создан</th>
+                  <th style={{ width: 160 }}>Действия</th>
                 </tr>
               </thead>
               <tbody>
@@ -121,9 +121,9 @@ export function AdminUsersPage() {
                         className="adminBtn"
                         onClick={() => onDelete(u)}
                         disabled={u.role === "admin"}
-                        title={u.role === "admin" ? "Cannot delete admin" : "Delete user"}
+                        title={u.role === "admin" ? "Нельзя удалить администратора" : "Удалить пользователя"}
                       >
-                        Delete
+                        Удалить
                       </button>
                     </td>
                   </tr>
@@ -131,7 +131,7 @@ export function AdminUsersPage() {
                 {users.length === 0 ? (
                   <tr>
                     <td colSpan={5} style={{ color: "rgba(255,255,255,0.68)" }}>
-                      No users found.
+                      Пользователи не найдены.
                     </td>
                   </tr>
                 ) : null}

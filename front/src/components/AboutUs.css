@@ -1,0 +1,150 @@
+.about-us {
+  padding: 36px 20px 28px;
+  margin-top: 70px;
+}
+
+.about-us__shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 28px;
+  align-items: stretch;
+}
+
+.about-us__lead,
+.about-us__card {
+  border-radius: 32px;
+  background:#fff;
+  box-shadow: 0 16px 40px rgba(101, 82, 82, 0.1);
+}
+
+.about-us__lead {
+  padding: 36px;
+  position: relative;
+  overflow: hidden;
+}
+
+.about-us__lead::after {
+  content: "";
+  position: absolute;
+  right: -80px;
+  bottom: -80px;
+  width: 220px;
+  height: 220px;
+  border-radius: 999px;
+}
+
+.about-us__eyebrow {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #99819a;
+}
+
+.about-us__title {
+  margin: 0 0 18px;
+  font-size: clamp(34px, 4.8vw, 58px);
+  line-height: 0.96;
+  color: #2f2323;
+}
+
+.about-us__text {
+  max-width: 620px;
+  margin: 0;
+  font-size: 23px;
+  line-height: 1.55;
+  color: #615959;
+}
+
+.about-us__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.about-us__card {
+  padding: 28px 24px;
+}
+
+.about-us__card:first-child {
+  grid-column: 1 / -1;
+}
+
+.about-us__card--accent {
+  background:#665f5f;
+  color: #fff6f2;
+}
+
+.about-us__metric {
+  display: inline-block;
+  margin-bottom: 16px;
+  font-size: 52px;
+  line-height: 1;
+  font-weight: 800;
+  color: #6d5959;
+}
+
+.about-us__card--accent .about-us__metric,
+.about-us__card--accent .about-us__card-title,
+.about-us__card--accent .about-us__card-text {
+  color: inherit;
+}
+
+.about-us__card-title {
+  margin: 0 0 10px;
+  font-size: 28px;
+  line-height: 1.12;
+  color: #372d2d;
+}
+
+.about-us__card-text {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.55;
+  color: #655f5f;
+}
+
+@media (max-width: 1024px) {
+  .about-us__shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .about-us {
+    padding: 22px 16px 18px;
+  }
+
+  .about-us__lead {
+    padding: 28px 22px;
+    border-radius: 26px;
+  }
+
+  .about-us__text {
+    font-size: 19px;
+  }
+
+  .about-us__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .about-us__card {
+    padding: 24px 20px;
+    border-radius: 24px;
+  }
+
+  .about-us__card:first-child {
+    grid-column: auto;
+  }
+
+  .about-us__card-title {
+    font-size: 24px;
+  }
+
+  .about-us__card-text {
+    font-size: 18px;
+  }
+}

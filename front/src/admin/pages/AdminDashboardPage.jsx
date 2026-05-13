@@ -23,7 +23,7 @@ export function AdminDashboardPage() {
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(err?.message ?? "Failed to load dashboard data.");
+        setError(err?.message ?? "Не удалось загрузить данные панели.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -57,25 +57,25 @@ export function AdminDashboardPage() {
   return (
     <div className="adminGrid">
       <div className="adminCard adminCol4">
-        <div className="adminMetricLabel">Revenue</div>
+        <div className="adminMetricLabel">Выручка</div>
         <div className="adminMetricValue">
           {isLoading ? "..." : metrics.revenue.toFixed(2)}
         </div>
       </div>
       <div className="adminCard adminCol4">
-        <div className="adminMetricLabel">Orders total</div>
+        <div className="adminMetricLabel">Всего заказов</div>
         <div className="adminMetricValue">{isLoading ? "..." : metrics.count}</div>
       </div>
       <div className="adminCard adminCol4">
-        <div className="adminMetricLabel">Average order value</div>
+        <div className="adminMetricLabel">Средний чек</div>
         <div className="adminMetricValue">{isLoading ? "..." : metrics.avg.toFixed(2)}</div>
       </div>
 
       <div className="adminCard adminCol12">
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>Order funnel</div>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Воронка заказов</div>
         {error ? (
           <div>
-            <span className="adminBadge adminBadgeDanger">Error</span>{" "}
+            <span className="adminBadge adminBadgeDanger">Ошибка</span>{" "}
             <span style={{ color: "rgba(255,255,255,0.78)" }}>{error}</span>
           </div>
         ) : (
@@ -88,8 +88,8 @@ export function AdminDashboardPage() {
         )}
 
         <div style={{ marginTop: 12, color: "rgba(255,255,255,0.68)", lineHeight: 1.5 }}>
-          This demo dashboard is calculated from the current `/admin/orders` response
-          and does not use dedicated backend metrics yet.
+          Эта панель рассчитывается на основе текущего ответа `/admin/orders`
+          и пока не использует отдельные серверные метрики.
         </div>
       </div>
     </div>

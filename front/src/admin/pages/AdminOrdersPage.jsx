@@ -38,7 +38,7 @@ export function AdminOrdersPage() {
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(err?.message ?? "Failed to load orders.");
+        setError(err?.message ?? "Не удалось загрузить заказы.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -59,12 +59,12 @@ export function AdminOrdersPage() {
       const updated = await adminUpdateOrderStatus(orderId, nextStatus);
       setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
     } catch (err) {
-      setError(err?.message ?? "Failed to update order.");
+      setError(err?.message ?? "Не удалось обновить заказ.");
     }
   };
 
   const onDeleteOrder = async (order) => {
-    const ok = window.confirm(`Delete order #${order.id}?`);
+    const ok = window.confirm(`Удалить заказ #${order.id}?`);
     if (!ok) return;
 
     setError(null);
@@ -72,12 +72,12 @@ export function AdminOrdersPage() {
       await adminDeleteOrder(order.id);
       setOrders((prev) => prev.filter((item) => item.id !== order.id));
     } catch (err) {
-      setError(err?.message ?? "Failed to delete order.");
+      setError(err?.message ?? "Не удалось удалить заказ.");
     }
   };
 
   const onDeleteAllOrders = async () => {
-    const ok = window.confirm("Delete all orders?");
+    const ok = window.confirm("Удалить все заказы?");
     if (!ok) return;
 
     setError(null);
@@ -86,7 +86,7 @@ export function AdminOrdersPage() {
       await adminDeleteAllOrders();
       setOrders([]);
     } catch (err) {
-      setError(err?.message ?? "Failed to delete all orders.");
+      setError(err?.message ?? "Не удалось удалить все заказы.");
     } finally {
       setIsDeletingAll(false);
     }
@@ -97,9 +97,9 @@ export function AdminOrdersPage() {
       <div className="adminCard adminCol12">
         <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 18 }}>Orders</div>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>Заказы</div>
             <div style={{ color: "rgba(255,255,255,0.68)", marginTop: 4 }}>
-              Manage order statuses and review items.
+              Управляйте статусами заказов и просматривайте состав.
             </div>
           </div>
 
@@ -110,16 +110,16 @@ export function AdminOrdersPage() {
               onClick={onDeleteAllOrders}
               disabled={isLoading || isDeletingAll}
             >
-              {isDeletingAll ? "Deleting..." : "Delete all orders"}
+              {isDeletingAll ? "Удаляем..." : "Удалить все заказы"}
             </button>
             <div className="adminField" style={{ marginTop: 0, minWidth: 180 }}>
-              <label htmlFor="statusFilter">Status</label>
+              <label htmlFor="statusFilter">Статус</label>
               <select
                 id="statusFilter"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
-                <option value="all">All</option>
+                <option value="all">Все</option>
                 <option value="new">СОЗДАН</option>
                 <option value="sobiraetsa">СОБИРАЕТСЯ</option>
                 <option value="delivering">ДОСТАВЛЯЕТСЯ</option>
@@ -132,7 +132,7 @@ export function AdminOrdersPage() {
 
         {error ? (
           <div style={{ marginTop: 12 }}>
-            <span className="adminBadge adminBadgeDanger">Error</span>{" "}
+            <span className="adminBadge adminBadgeDanger">Ошибка</span>{" "}
             <span style={{ color: "rgba(255,255,255,0.78)" }}>{error}</span>
           </div>
         ) : null}
@@ -140,19 +140,19 @@ export function AdminOrdersPage() {
         <div style={{ marginTop: 14, overflowX: "auto" }}>
           {isLoading ? (
             <div style={{ color: "rgba(255,255,255,0.72)", padding: 8 }}>
-              Loading...
+              Загрузка...
             </div>
           ) : (
-            <table className="adminTable" aria-label="Orders table">
+            <table className="adminTable" aria-label="Таблица заказов">
               <thead>
                 <tr>
                   <th style={{ width: 90 }}>ID</th>
-                  <th style={{ width: 180 }}>Customer</th>
-                  <th style={{ width: 170 }}>Created</th>
-                  <th style={{ width: 130 }}>Status</th>
-                  <th style={{ width: 120 }}>Total</th>
-                  <th>Items</th>
-                  <th style={{ width: 220 }}>Actions</th>
+                  <th style={{ width: 180 }}>Покупатель</th>
+                  <th style={{ width: 170 }}>Создан</th>
+                  <th style={{ width: 130 }}>Статус</th>
+                  <th style={{ width: 120 }}>Сумма</th>
+                  <th>Товары</th>
+                  <th style={{ width: 220 }}>Действия</th>
                 </tr>
               </thead>
               <tbody>
@@ -164,7 +164,7 @@ export function AdminOrdersPage() {
                       <td>#{o.id}</td>
                       <td>
                         <div style={{ fontWeight: 700 }}>
-                          {o.user_username || "Unknown user"}
+                          {o.user_username || "Неизвестный пользователь"}
                         </div>
                         <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 12 }}>
                           ID: {o.user_id ?? "-"}
@@ -190,7 +190,7 @@ export function AdminOrdersPage() {
                       <td>
                         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                           <select
-                            aria-label={`Update status for order ${o.id}`}
+                            aria-label={`Изменить статус заказа ${o.id}`}
                             value={o.status}
                             onChange={(e) => onChangeStatus(o.id, e.target.value)}
                           >
@@ -201,7 +201,7 @@ export function AdminOrdersPage() {
                             <option value="canceled">ОТМЕНЕН</option>
                           </select>
                           <button type="button" className="adminBtn" onClick={() => onDeleteOrder(o)}>
-                            Delete
+                            Удалить
                           </button>
                         </div>
                       </td>
@@ -211,7 +211,7 @@ export function AdminOrdersPage() {
                 {filtered.length === 0 ? (
                   <tr>
                     <td colSpan={7} style={{ color: "rgba(255,255,255,0.68)" }}>
-                      No orders found.
+                      Заказы не найдены.
                     </td>
                   </tr>
                 ) : null}

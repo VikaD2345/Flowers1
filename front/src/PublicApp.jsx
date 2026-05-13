@@ -3,6 +3,7 @@ import "./App.css";
 import Header from "./components/Header";
 import Main1 from "./components/Heros";
 import Popular from "./components/Popular";
+import AboutUs from "./components/AboutUs";
 import Benefits from "./components/Benefits";
 import FAQ from "./components/FAQ";
 import Gallery from "./components/Gallery";
@@ -10,6 +11,7 @@ import Location from "./components/Location";
 import Footer from "./components/Footer";
 import CartPage from "./components/CartPage";
 import CatalogPage from "./components/CatalogPage";
+import ProductPage from "./components/ProductPage";
 import AuthPage from "./components/AuthPage";
 import AccountPage from "./components/AccountPage";
 import CheckoutPage from "./components/CheckoutPage";
@@ -21,19 +23,24 @@ import {
   fetchCurrentUser,
   fetchFlowers,
   fetchOrders,
+  logoutUser,
+  refreshSession,
   updateCartItem,
   deleteCartItem,
 } from "./api/publicApi";
-import { getAccessToken, getSessionUser, logoutLocalUser, saveSession } from "./utils/authStorage";
+import { getSessionUser, logoutLocalUser, saveSession } from "./utils/authStorage";
 
 const PAYMENT_LABELS = {
   card: "Картой курьеру",
   cash: "Наличными курьеру",
 };
+const MAX_CART_ITEM_QTY = 30;
 
 export default function PublicApp() {
   const [currentPage, setCurrentPage] = useState("home");
+  const [authInitialMode, setAuthInitialMode] = useState("register");
   const [products, setProducts] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [cartItems, setCartItems] = useState([]);
   const [authUser, setAuthUser] = useState(null);
   const [orders, setOrders] = useState([]);
@@ -77,33 +84,38 @@ export default function PublicApp() {
   }, [currentPage]);
 
   useEffect(() => {
+    if (currentPage === "cart" && (!authUser || !accessToken)) {
+      setAuthInitialMode("register");
+      setCurrentPage("auth");
+    }
+  }, [currentPage, authUser, accessToken]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const bootstrapSession = async () => {
       const storedUser = getSessionUser();
-      const storedToken = getAccessToken();
 
-      if (!storedUser || !storedToken) {
-        if (isMounted) {
-          setIsAppReady(true);
-        }
-        return;
+      if (storedUser && isMounted) {
+        setAuthUser(storedUser);
       }
 
       try {
+        const refreshPayload = await refreshSession();
+        const nextToken = refreshPayload.access_token;
         const [user, cart, userOrders] = await Promise.all([
-          fetchCurrentUser(storedToken),
-          fetchCart(storedToken),
-          fetchOrders(storedToken),
+          fetchCurrentUser(nextToken),
+          fetchCart(nextToken),
+          fetchOrders(nextToken),
         ]);
 
         if (!isMounted) {
           return;
         }
 
-        saveSession({ user, token: storedToken });
+        saveSession({ user });
         setAuthUser(user);
-        setAccessToken(storedToken);
+        setAccessToken(nextToken);
         setCartItems(cart);
         setOrders(userOrders);
       } catch {
@@ -136,15 +148,69 @@ export default function PublicApp() {
       setAccessToken(null);
       setCartItems([]);
       setOrders([]);
+      setAuthInitialMode("login");
       setCurrentPage("auth");
+      return;
     }
 
     setPageError(error?.message || fallbackMessage);
   };
 
+  const refreshAccessToken = async () => {
+    const refreshPayload = await refreshSession();
+    const nextToken = refreshPayload.access_token;
+    setAccessToken(nextToken);
+    return nextToken;
+  };
+
+  const runAuthenticatedRequest = async (requestFn) => {
+    if (!accessToken) {
+      const error = new Error("Not authenticated");
+      error.status = 401;
+      throw error;
+    }
+
+    try {
+      return await requestFn(accessToken);
+    } catch (error) {
+      if (error?.status !== 401) {
+        throw error;
+      }
+
+      const nextToken = await refreshAccessToken();
+      return requestFn(nextToken);
+    }
+  };
+
   const goToCatalog = () => {
+    setSelectedProduct(null);
     setPageError("");
     setCurrentPage("catalog");
+  };
+
+  const openProductPage = (product, page = currentPage) => {
+    setSelectedProduct(product);
+    setPageError("");
+    if (page) {
+      setCurrentPage(page);
+    }
+  };
+
+  const openAuthPage = (mode = "register", message = "") => {
+    setAuthInitialMode(mode);
+    setPageError(message);
+    setCurrentPage("auth");
+  };
+
+  const handlePageNavigate = (page) => {
+    if (page === "cart" && (!authUser || !accessToken)) {
+      openAuthPage("register", "Чтобы открыть корзину, сначала зарегистрируйтесь.");
+      return;
+    }
+
+    setSelectedProduct(null);
+    setPageError("");
+    setCurrentPage(page);
   };
 
   const buildOptimisticCartItem = (product, qty) => {
@@ -161,13 +227,17 @@ export default function PublicApp() {
 
   const addToCart = async (product) => {
     if (!authUser || !accessToken) {
-      setPageError("Чтобы добавить товар в корзину, сначала войдите в аккаунт.");
-      setCurrentPage("auth");
+      openAuthPage("register", "Чтобы добавить товар в корзину, сначала зарегистрируйтесь.");
       return false;
     }
 
     const productId = product.productId ?? product.id;
     const previousCartItems = cartItems;
+    const existingItem = cartItems.find((item) => item.productId === productId);
+    if (existingItem && existingItem.qty >= MAX_CART_ITEM_QTY) {
+      setPageError(`В корзину можно добавить не больше ${MAX_CART_ITEM_QTY} шт. одного товара.`);
+      return false;
+    }
 
     setCartItems((prev) => {
       const existingItem = prev.find((item) => item.productId === productId);
@@ -181,7 +251,7 @@ export default function PublicApp() {
     setPageError("");
 
     try {
-      const nextItem = await addCartItem(accessToken, productId, 1);
+      const nextItem = await runAuthenticatedRequest((token) => addCartItem(token, productId, 1));
       setCartItems((prev) => {
         const result = [];
         let inserted = false;
@@ -212,8 +282,13 @@ export default function PublicApp() {
   };
 
   const increaseQty = async (item) => {
+    if (item.qty >= MAX_CART_ITEM_QTY) {
+      setPageError(`В корзину можно добавить не больше ${MAX_CART_ITEM_QTY} шт. одного товара.`);
+      return;
+    }
+
     try {
-      const updatedItem = await updateCartItem(accessToken, item.id, item.qty + 1);
+      const updatedItem = await runAuthenticatedRequest((token) => updateCartItem(token, item.id, item.qty + 1));
       setCartItems((prev) => prev.map((entry) => (entry.id === updatedItem.id ? updatedItem : entry)));
       setPageError("");
     } catch (error) {
@@ -228,7 +303,7 @@ export default function PublicApp() {
     }
 
     try {
-      const updatedItem = await updateCartItem(accessToken, item.id, item.qty - 1);
+      const updatedItem = await runAuthenticatedRequest((token) => updateCartItem(token, item.id, item.qty - 1));
       setCartItems((prev) => prev.map((entry) => (entry.id === updatedItem.id ? updatedItem : entry)));
       setPageError("");
     } catch (error) {
@@ -238,7 +313,7 @@ export default function PublicApp() {
 
   const removeFromCart = async (item) => {
     try {
-      await deleteCartItem(accessToken, item.id);
+      await runAuthenticatedRequest((token) => deleteCartItem(token, item.id));
       setCartItems((prev) => prev.filter((entry) => entry.id !== item.id));
       setPageError("");
     } catch (error) {
@@ -246,8 +321,7 @@ export default function PublicApp() {
     }
   };
 
-  const handleAuthSuccess = async (user) => {
-    const token = getAccessToken();
+  const handleAuthSuccess = async (user, token) => {
     if (!token) {
       setPageError("Сессия не была сохранена после входа.");
       return;
@@ -256,6 +330,7 @@ export default function PublicApp() {
     try {
       const [cart, userOrders] = await Promise.all([fetchCart(token), fetchOrders(token)]);
       setAuthUser(user);
+      saveSession({ user });
       setAccessToken(token);
       setCartItems(cart);
       setOrders(userOrders);
@@ -266,7 +341,12 @@ export default function PublicApp() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch {
+      // Local cleanup is still enough to close the UI session if the network is unavailable.
+    }
     logoutLocalUser();
     setAuthUser(null);
     setAccessToken(null);
@@ -277,7 +357,13 @@ export default function PublicApp() {
   };
 
   const handleProfileOpen = () => {
-    setCurrentPage(authUser ? "account" : "auth");
+    if (authUser) {
+      setPageError("");
+      setCurrentPage("account");
+      return;
+    }
+
+    openAuthPage("register");
   };
 
   const handleCheckoutOpen = () => {
@@ -286,7 +372,7 @@ export default function PublicApp() {
     }
 
     if (!authUser || !accessToken) {
-      setCurrentPage("auth");
+      openAuthPage("register", "Чтобы перейти к оформлению заказа, сначала зарегистрируйтесь.");
       return;
     }
 
@@ -295,10 +381,10 @@ export default function PublicApp() {
 
   const handleOrderSubmit = async ({ address, paymentMethod }) => {
     try {
-      const newOrder = await createOrder(accessToken, {
+      const newOrder = await runAuthenticatedRequest((token) => createOrder(token, {
         address,
         paymentMethod: PAYMENT_LABELS[paymentMethod] ?? paymentMethod,
-      });
+      }));
 
       setOrders((prev) => [newOrder, ...prev]);
       setCartItems([]);
@@ -317,6 +403,7 @@ export default function PublicApp() {
     return (
       <>
         <AuthPage
+          initialMode={authInitialMode}
           onBackHome={() => setCurrentPage("home")}
           onAuthSuccess={handleAuthSuccess}
         />
@@ -329,7 +416,7 @@ export default function PublicApp() {
     return (
       <div className="page">
         <Header
-          onNavigate={setCurrentPage}
+          onNavigate={handlePageNavigate}
           currentPage={currentPage}
           onOpenProfile={handleProfileOpen}
         />
@@ -351,13 +438,13 @@ export default function PublicApp() {
     return (
       <div className="page">
         <Header
-          onNavigate={setCurrentPage}
+          onNavigate={handlePageNavigate}
           currentPage={currentPage}
           onOpenProfile={handleProfileOpen}
         />
         <CheckoutPage
           items={cartItems}
-          onBackToCart={() => setCurrentPage("cart")}
+          onBackToCart={() => handlePageNavigate("cart")}
           onSubmitOrder={handleOrderSubmit}
         />
         <Footer />
@@ -369,7 +456,7 @@ export default function PublicApp() {
   return (
     <div className="page">
       <Header
-        onNavigate={setCurrentPage}
+        onNavigate={handlePageNavigate}
         currentPage={currentPage}
         onOpenProfile={handleProfileOpen}
       />
@@ -377,6 +464,7 @@ export default function PublicApp() {
         <CatalogPage
           products={products}
           onAddToCart={addToCart}
+          onOpenProduct={openProductPage}
           isLoading={isCatalogLoading}
           error={catalogError || pageError}
         />
@@ -384,6 +472,7 @@ export default function PublicApp() {
         <>
           <Main1 />
           <Popular products={products} onAddToCart={addToCart} goToCatalog={goToCatalog} />
+          <AboutUs />
           <Benefits />
           <FAQ />
           <Gallery />
@@ -395,10 +484,19 @@ export default function PublicApp() {
           onIncrease={increaseQty}
           onDecrease={decreaseQty}
           onRemove={removeFromCart}
+          onOpenProduct={(product) => openProductPage(product, "cart")}
           goToCatalog={goToCatalog}
           onCheckout={handleCheckoutOpen}
+          maxItemQty={MAX_CART_ITEM_QTY}
         />
       )}
+      {selectedProduct ? (
+        <ProductPage
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+          onAddToCart={addToCart}
+        />
+      ) : null}
       <Footer />
       <FlowerAssistant onAddToCart={addToCart} onOpenCatalog={goToCatalog} />
     </div>
