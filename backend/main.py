@@ -7,6 +7,7 @@ from datetime import datetime
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from pathlib import Path
+from typing import Optional
 
 from fastapi.encoders import jsonable_encoder
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -219,11 +220,11 @@ class FlowerCreate(FlowerBase):
 
 
 class FlowerUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=4000)
-    category: str | None = Field(default=None, min_length=1, max_length=255)
-    price: float | None = Field(default=None, ge=0)
-    image_url: str | None = Field(default=None, min_length=1, max_length=1024)
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=4000)
+    category: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    price: Optional[float] = Field(default=None, ge=0)
+    image_url: Optional[str] = Field(default=None, min_length=1, max_length=1024)
 
 
 class FlowerOut(FlowerBase):
@@ -261,8 +262,8 @@ class OrderOut(BaseModel):
     delivery_address: str
     payment_method: str
     created_at: datetime
-    user_id: int | None = None
-    user_username: str | None = None
+    user_id: Optional[int] = None
+    user_username: Optional[str] = None
     items: list[OrderItemOut]
 
 
@@ -280,10 +281,10 @@ class AuditLogOut(BaseModel):
     actor_username: str
     action: str
     entity: str
-    entity_id: int | None
-    before: dict | None
-    after: dict | None
-    meta: dict | None
+    entity_id: Optional[int]
+    before: Optional[dict]
+    after: Optional[dict]
+    meta: Optional[dict]
     created_at: datetime
 
 
@@ -293,16 +294,16 @@ class AssistantMessageIn(BaseModel):
 
 
 class AssistantCriteriaOut(BaseModel):
-    style: str | None = None
-    recipient: str | None = None
-    occasion: str | None = None
-    budget_text: str | None = None
-    budget_min: float | None = None
-    budget_max: float | None = None
+    style: Optional[str] = None
+    recipient: Optional[str] = None
+    occasion: Optional[str] = None
+    budget_text: Optional[str] = None
+    budget_min: Optional[float] = None
+    budget_max: Optional[float] = None
 
 
 class AssistantProductOut(FlowerOut):
-    match_reason: str | None = None
+    match_reason: Optional[str] = None
 
 
 class AssistantChatRequest(BaseModel):
@@ -1802,54 +1803,6 @@ def assistant_chat_stream(payload: AssistantChatRequest, db: Session = Depends(g
         )
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-
-@app.post("/auth/register", response_model=UserOut, tags=["guest"])
-def register(payload: UserRegister, db: Session = Depends(get_db)) -> UserOut:
-    exists = db.query(UserModel).filter(UserModel.username == payload.username).one_or_none()
-    if exists is not None:
-        raise HTTPException(status_code=400, detail="Пользователь с таким именем уже существует")
-
-    user = UserModel(
-        username=payload.username,
-        password_hash=pwd_context.hash(payload.password),
-        role=UserRole.user,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return UserOut(id=user.id, username=user.username, role=user.role)
-
-
-@app.post("/auth/login", response_model=TokenOut, tags=["guest"])
-def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenOut:
-    user = db.query(UserModel).filter(UserModel.username == payload.username).one_or_none()
-    if user is None or not pwd_context.verify(payload.password, user.password_hash):
-        raise HTTPException(status_code=400, detail="Неверное имя пользователя или пароль")
-
-    access_token = _create_access_token(sub=user.username, role=user.role.value)
-    refresh_token = _create_refresh_token(sub=user.username, role=user.role.value)
-    return TokenOut(access_token=access_token, refresh_token=refresh_token)
-
-
-@app.post("/auth/refresh", response_model=TokenOut, tags=["guest"])
-def refresh_access_token(payload: RefreshTokenIn, db: Session = Depends(get_db)) -> TokenOut:
-    decoded = _decode_token(payload.refresh_token, expected_type="refresh")
-    username = decoded["sub"]
-
-    user = db.query(UserModel).filter(UserModel.username == username).one_or_none()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-
-    access_token = _create_access_token(sub=user.username, role=user.role.value)
-    refresh_token = _create_refresh_token(sub=user.username, role=user.role.value)
-    return TokenOut(access_token=access_token, refresh_token=refresh_token)
-
-
-@app.get("/me", response_model=UserOut, tags=["user"])
-def me(current_user: UserModel = Depends(get_current_user)) -> UserOut:
-    return UserOut(id=current_user.id, username=current_user.username, role=current_user.role)
-
 
 @app.get("/flowers", response_model=list[FlowerOut], tags=["guest"])
 def list_flowers(db: Session = Depends(get_db)) -> list[FlowerOut]:

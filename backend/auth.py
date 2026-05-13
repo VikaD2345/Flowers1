@@ -4,6 +4,7 @@ import hashlib
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -116,7 +117,7 @@ def _issue_token_pair(response: Response, db: Session, user: UserModel) -> Token
 
 
 def get_current_user(
-    creds: HTTPAuthorizationCredentials | None = Depends(security),
+    creds: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db),
 ) -> UserModel:
     if creds is None:
